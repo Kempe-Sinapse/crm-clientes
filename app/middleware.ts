@@ -31,17 +31,16 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // Atualiza a sessão e pega o usuário
   const {
     data: { user },
   } = await supabase.auth.getUser()
 
-  // Regra 1: Se o usuário NÃO estiver logado e tentar acessar qualquer página que NÃO seja /login ou rotas públicas
+  // Se NÃO estiver logado e NÃO for a página de login, manda pro login
   if (!user && !request.nextUrl.pathname.startsWith('/login')) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  // Regra 2: Se o usuário JÁ estiver logado e tentar acessar a página de login
+  // Se JÁ estiver logado e tentar acessar o login, manda pra home
   if (user && request.nextUrl.pathname.startsWith('/login')) {
     return NextResponse.redirect(new URL('/', request.url))
   }
@@ -51,15 +50,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    /*
-     * Aplica o middleware em todas as rotas, exceto:
-     * - _next/static (arquivos estáticos)
-     * - _next/image (otimização de imagens)
-     * - favicon.ico (ícone)
-     * - api/ (rotas de API - opcional, mas recomendado deixar o auth lidar ou proteger separadamente)
-     * - auth/callback (rotas de confirmação de email)
-     * - imagens (svg, png, jpg, etc)
-     */
     '/((?!_next/static|_next/image|favicon.ico|auth/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }
