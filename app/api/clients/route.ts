@@ -1,7 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
-const DEFAULT_SETUP_TASKS = [
+// Lista padrão de tarefas (que na sua visão são as subtarefas do cliente)
+const STANDARD_CHECKLIST = [
   "Grupo/Boas Vindas (Coleta Dados)",
   "Acesso Checkout",
   "Workflow N8N",
@@ -17,16 +18,21 @@ const DEFAULT_SETUP_TASKS = [
 export async function GET() {
   const supabase = await createClient()
   
-  // Trazemos tudo ordenado por deadline (baseado no created_at do cliente)
   const { data: clients, error } = await supabase
     .from('clients')
     .select(`
       *,
-      tasks (*)
+      tasks (
+        *,
+        subtasks (*),
+        comments (*)
+      )
     `)
-    .order('created_at', { ascending: true }) // Mais antigos (deadline mais próximo) primeiro
+    .order('created_at', { ascending: false })
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
 
   return NextResponse.json({ clients })
 }
@@ -35,7 +41,7 @@ export async function POST(request: Request) {
   const supabase = await createClient()
   const body = await request.json()
   
-  // 1. Criar Cliente
+  // 1. Criar o Cliente (Tarefa Mãe)
   const { data: client, error: clientError } = await supabase
     .from('clients')
     .insert({
@@ -46,23 +52,28 @@ export async function POST(request: Request) {
     .select()
     .single()
 
-  if (clientError) return NextResponse.json({ error: clientError.message }, { status: 500 })
+  if (clientError) {
+    return NextResponse.json({ error: clientError.message }, { status: 500 })
+  }
 
-  // 2. Criar as 10 Subtarefas Padrão
-  const tasksToCreate = DEFAULT_SETUP_TASKS.map((title, index) => ({
-    client_id: client.id,
-    title: title,
-    position: index,
-    is_completed: false
-  }))
+  // 2. Criar automaticamente as tarefas padrão (Checklist)
+  if (client) {
+    const tasksToInsert = STANDARD_CHECKLIST.map((title, index) => ({
+      client_id: client.id,
+      title: title,
+      position: index,
+      is_completed: false,
+      // Define um deadline padrão igual ao do cliente (7 dias) se desejar, ou nulo
+      deadline: null 
+    }))
 
-  const { error: tasksError } = await supabase
-    .from('tasks')
-    .insert(tasksToCreate)
-
-  if (tasksError) {
-    // Em produção, idealmente faria rollback, mas aqui apenas logamos
-    console.error("Erro ao criar tarefas padrão:", tasksError)
+    const { error: tasksError } = await supabase
+      .from('tasks')
+      .insert(tasksToInsert)
+      
+    if (tasksError) {
+      console.error("Erro ao criar checklist padrão:", tasksError)
+    }
   }
 
   return NextResponse.json({ client })
