@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
-// Lista padrão de tarefas (que na sua visão são as subtarefas do cliente)
+// Lista de tarefas padrão (Checklist do Cliente)
 const STANDARD_CHECKLIST = [
   "Grupo/Boas Vindas (Coleta Dados)",
   "Acesso Checkout",
@@ -18,15 +18,12 @@ const STANDARD_CHECKLIST = [
 export async function GET() {
   const supabase = await createClient()
   
+  // Trazemos o cliente e suas tarefas (checklist)
   const { data: clients, error } = await supabase
     .from('clients')
     .select(`
       *,
-      tasks (
-        *,
-        subtasks (*),
-        comments (*)
-      )
+      tasks (*)
     `)
     .order('created_at', { ascending: false })
 
@@ -56,14 +53,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: clientError.message }, { status: 500 })
   }
 
-  // 2. Criar automaticamente as tarefas padrão (Checklist)
+  // 2. Criar automaticamente o Checklist Padrão
   if (client) {
     const tasksToInsert = STANDARD_CHECKLIST.map((title, index) => ({
       client_id: client.id,
       title: title,
       position: index,
       is_completed: false,
-      // Define um deadline padrão igual ao do cliente (7 dias) se desejar, ou nulo
       deadline: null 
     }))
 
@@ -72,7 +68,7 @@ export async function POST(request: Request) {
       .insert(tasksToInsert)
       
     if (tasksError) {
-      console.error("Erro ao criar checklist padrão:", tasksError)
+      console.error("Erro ao criar checklist:", tasksError)
     }
   }
 
