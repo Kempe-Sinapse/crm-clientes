@@ -5,7 +5,7 @@ export async function POST(request: Request) {
   const supabase = await createClient()
   const body = await request.json()
   
-  // Pegar a última posição para adicionar no final
+  // 1. Descobrir a última posição para adicionar no final
   const { count } = await supabase
     .from('tasks')
     .select('*', { count: 'exact', head: true })
@@ -18,7 +18,7 @@ export async function POST(request: Request) {
       title: body.title,
       description: body.description,
       deadline: body.deadline,
-      position: count || 0 // Define posição inicial
+      position: count || 0 // Define posição sempre no final
     })
     .select()
     .single()
@@ -34,14 +34,11 @@ export async function PATCH(request: Request) {
   const supabase = await createClient()
   const body = await request.json()
   
-  // Objeto dinâmico para permitir atualizar apenas o que for enviado
+  // Atualização dinâmica
   const updates: any = {}
-  if (body.completed !== undefined) updates.is_completed = body.completed // Mapeando para o nome correto do banco se necessário
   if (body.is_completed !== undefined) updates.is_completed = body.is_completed
   if (body.title !== undefined) updates.title = body.title
-  if (body.description !== undefined) updates.description = body.description
-  if (body.deadline !== undefined) updates.deadline = body.deadline
-  if (body.position !== undefined) updates.position = body.position // Adicionado campo position
+  if (body.position !== undefined) updates.position = body.position // Suporte a reordenar
 
   const { data: task, error } = await supabase
     .from('tasks')
@@ -57,6 +54,7 @@ export async function PATCH(request: Request) {
   return NextResponse.json({ task })
 }
 
+// ... DELETE function (mantenha como está)
 export async function DELETE(request: Request) {
   const supabase = await createClient()
   const { searchParams } = new URL(request.url)
@@ -67,9 +65,6 @@ export async function DELETE(request: Request) {
     .delete()
     .eq('id', id)
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
-
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ success: true })
 }
