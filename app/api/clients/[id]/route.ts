@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { addDays } from 'date-fns'
 
 export async function PATCH(
   request: Request,
@@ -9,6 +10,7 @@ export async function PATCH(
   const { id } = await params
   const body = await request.json()
   
+  // 1. Atualiza o cliente
   const { data: client, error } = await supabase
     .from('clients')
     .update(body)
@@ -18,6 +20,28 @@ export async function PATCH(
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  // 2. Lógica Especial: Se moveu para Carteira (follow-up), cria a primeira tarefa de 15 dias
+  if (body.status === 'follow-up') {
+    const deadline = addDays(new Date(), 15).toISOString()
+    
+    // Verifica se já não existe uma tarefa pendente para não duplicar
+    const { count } = await supabase
+        .from('tasks')
+        .select('*', { count: 'exact', head: true })
+        .eq('client_id', id)
+        .eq('is_completed', false)
+
+    if (count === 0) {
+        await supabase.from('tasks').insert({
+        client_id: id,
+        title: 'Follow-up Quinzenal',
+        description: 'Contato de manutenção de carteira.',
+        deadline: deadline,
+        position: 0
+        })
+    }
   }
 
   return NextResponse.json({ client })
