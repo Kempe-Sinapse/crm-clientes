@@ -13,7 +13,7 @@ import {
 } from 'lucide-react'
 import type { Client, Task as TaskType, Comment } from '@/lib/types'
 import { cn } from '@/lib/utils'
-// FIX: Adicionado formatDistanceToNow na importação abaixo
+// CORREÇÃO: Adicionado formatDistanceToNow na importação abaixo
 import { addDays, format, differenceInCalendarDays, formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 
@@ -115,59 +115,35 @@ function SortableTaskItem({ task, onToggle, onEdit }: { task: TaskType, onToggle
   )
 }
 
-// ... imports (mantenha os existentes)
-// Adicione activeTab prop se ainda não tiver, ou use a lógica abaixo
-
+// --- Componente Principal ---
 interface ClientCardProps {
   client: Client & { tasks: TaskType[], comments: Comment[] }
   onUpdate: () => void
-  initialExpanded?: boolean // Nova prop
-  initialTab?: 'tasks' | 'comments' // Nova prop
+  initialExpanded?: boolean
+  initialTab?: 'tasks' | 'comments'
 }
 
 export function ClientCard({ client, onUpdate, initialExpanded = false, initialTab = 'tasks' }: ClientCardProps) {
-  // Inicialize o estado com as props
   const [isExpanded, setIsExpanded] = useState(initialExpanded)
   const [activeTab, setActiveTab] = useState<'tasks' | 'comments'>(initialTab)
+  const [localTasks, setLocalTasks] = useState<TaskType[]>(client.tasks || [])
   
-  // Efeito para reagir a mudanças nas props (ex: quando clica na notificação)
+  // Reage a props externas (notificações) e atualizações do banco
+  useEffect(() => {
+    setLocalTasks(client.tasks?.sort((a, b) => (a.position || 0) - (b.position || 0)) || [])
+  }, [client.tasks])
+
   useEffect(() => {
     if (initialExpanded) {
         setIsExpanded(true)
         if (initialTab) setActiveTab(initialTab)
         
-        // Scroll suave até o card
         const element = document.getElementById(`client-${client.id}`)
         if (element) {
             setTimeout(() => element.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100)
         }
     }
   }, [initialExpanded, initialTab, client.id])
-
-  // ... (Resto do código do componente: states, handlers, return...)
-  // ...
-  // IMPORTANTE: Adicione o id no elemento raiz do Card para o scroll funcionar:
-  return (
-    <Card 
-      id={`client-${client.id}`} // <--- ADICIONE ISSO
-      className={cn(
-        // ... classes existentes
-      )}
-    >
-      {/* ... conteúdo do card ... */}
-    </Card>
-  )
-}
-
-export function ClientCard({ client, onUpdate }: ClientCardProps) {
-  const [isExpanded, setIsExpanded] = useState(false)
-  const [activeTab, setActiveTab] = useState<'tasks' | 'comments'>('tasks')
-  const [localTasks, setLocalTasks] = useState<TaskType[]>(client.tasks || [])
-  
-  // Sincronizar estado local com props quando o pai atualiza
-  useEffect(() => {
-    setLocalTasks(client.tasks?.sort((a, b) => (a.position || 0) - (b.position || 0)) || [])
-  }, [client.tasks])
 
   // Estados de Input
   const [isAddingTask, setIsAddingTask] = useState(false)
@@ -177,7 +153,7 @@ export function ClientCard({ client, onUpdate }: ClientCardProps) {
 
   // Configuração DND
   const sensors = useSensors(
-    useSensor(PointerSensor),
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   )
 
@@ -190,7 +166,7 @@ export function ClientCard({ client, onUpdate }: ClientCardProps) {
   const deadlineDate = addDays(startDate, 7)
   const daysLeft = differenceInCalendarDays(deadlineDate, new Date())
   
-  // Lógica de Cor do Deadline (Levemente vermelho < 4 dias, intenso < 2 dias)
+  // Lógica de Cor do Deadline
   const getDeadlineStyles = () => {
     if (client.status !== 'setup') return "border-border text-muted-foreground"
     
@@ -212,7 +188,6 @@ export function ClientCard({ client, onUpdate }: ClientCardProps) {
       const newIndex = items.findIndex((i) => i.id === over.id)
       const newOrder = arrayMove(items, oldIndex, newIndex)
       
-      // Persistir a nova ordem no backend
       const updates = newOrder.map((task, index) => 
         fetch('/api/tasks', {
             method: 'PATCH',
@@ -220,7 +195,7 @@ export function ClientCard({ client, onUpdate }: ClientCardProps) {
             body: JSON.stringify({ id: task.id, position: index })
         })
       )
-      Promise.all(updates).then(() => onUpdate()) 
+      Promise.all(updates).then(() => onUpdate())
 
       return newOrder
     })
@@ -228,12 +203,12 @@ export function ClientCard({ client, onUpdate }: ClientCardProps) {
 
   const handleAddTask = async () => {
     if (!newTaskTitle.trim()) return
-    // Adiciona visualmente primeiro
+    
     const optimisticTask = {
         id: 'temp-' + Date.now(),
         title: newTaskTitle,
         is_completed: false,
-        position: localTasks.length, // Adiciona ao final
+        position: localTasks.length,
         client_id: client.id
     } as TaskType
     
@@ -254,7 +229,6 @@ export function ClientCard({ client, onUpdate }: ClientCardProps) {
 
   const handleToggleTask = async (task: TaskType) => {
     const newStatus = !task.is_completed
-    // Atualização otimista local
     setLocalTasks(localTasks.map(t => t.id === task.id ? {...t, is_completed: newStatus} : t))
 
     await fetch('/api/tasks', {
@@ -308,13 +282,13 @@ export function ClientCard({ client, onUpdate }: ClientCardProps) {
 
   return (
     <Card 
+      id={`client-${client.id}`}
       className={cn(
-        "group relative border-border/40 bg-card/40 hover:bg-card/80 transition-all duration-200 shadow-sm overflow-hidden mb-2", // Margem inferior reduzida
+        "group relative border-border/40 bg-card/40 hover:bg-card/80 transition-all duration-200 shadow-sm overflow-hidden mb-2",
         isComplete && "border-emerald-500/20 bg-emerald-500/5"
       )}
     >
-      {/* Container Principal Compacto */}
-      <div className="px-3 py-2.5"> {/* Padding Reduzido */}
+      <div className="px-3 py-2.5">
         <div className="flex items-center gap-3">
           <button
             onClick={() => setIsExpanded(!isExpanded)}
@@ -323,17 +297,14 @@ export function ClientCard({ client, onUpdate }: ClientCardProps) {
             {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
           </button>
 
-          {/* Header do Card - Layout em Linha Única */}
           <div className="flex-1 cursor-pointer grid grid-cols-[1fr_auto] items-center gap-4" onClick={() => setIsExpanded(!isExpanded)}>
             
-            {/* Esquerda: Nome e Datas */}
             <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-4 overflow-hidden">
                 <h3 className="font-semibold text-sm text-foreground truncate flex items-center gap-2 min-w-fit">
                   {client.name}
                   {isComplete && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />}
                 </h3>
                 
-                {/* Datas na mesma linha (Mobile quebra) */}
                 <div className="flex items-center gap-2 text-xs text-muted-foreground/80 font-mono">
                     <span className="hidden md:inline text-border">|</span>
                     <Calendar className="w-3 h-3 opacity-70" />
@@ -343,12 +314,11 @@ export function ClientCard({ client, onUpdate }: ClientCardProps) {
                 </div>
             </div>
 
-            {/* Direita: Deadline e Contador */}
             <div className="flex items-center gap-3">
                {client.status === 'setup' && (
                   <div className={cn(
                       "px-2.5 py-0.5 rounded text-xs font-bold transition-all border flex items-center gap-1.5",
-                      getDeadlineStyles() // Função de cor dinâmica
+                      getDeadlineStyles()
                   )}>
                     <Clock className="w-3 h-3" />
                     {daysLeft > 0 ? `${daysLeft}d` : 'HOJE'}
@@ -371,11 +341,9 @@ export function ClientCard({ client, onUpdate }: ClientCardProps) {
           </div>
         </div>
 
-        {/* Área Expansível */}
         {isExpanded && (
           <div className="mt-2 pt-2 border-t border-border/40 animate-in slide-in-from-top-1 duration-200">
             
-            {/* Abas Internas */}
             <div className="flex gap-4 px-2 mb-2">
                <button 
                  onClick={() => setActiveTab('tasks')}
@@ -392,7 +360,6 @@ export function ClientCard({ client, onUpdate }: ClientCardProps) {
             </div>
 
             <div className="pl-1 md:pl-7 pr-1">
-              {/* ABA: TAREFAS (COM DND) */}
               {activeTab === 'tasks' && (
                 <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                     <SortableContext items={localTasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
@@ -408,7 +375,6 @@ export function ClientCard({ client, onUpdate }: ClientCardProps) {
                         </div>
                     </SortableContext>
 
-                    {/* Adicionar Nova Tarefa */}
                     {isAddingTask ? (
                         <div className="flex gap-2 items-center mt-2 pl-1.5 animate-in fade-in">
                         <Input
@@ -433,7 +399,6 @@ export function ClientCard({ client, onUpdate }: ClientCardProps) {
                 </DndContext>
               )}
 
-              {/* ABA: COMENTÁRIOS */}
               {activeTab === 'comments' && (
                 <div className="space-y-3 pt-1">
                    <div className="space-y-2 max-h-[150px] overflow-y-auto pr-2 custom-scrollbar">
@@ -444,7 +409,6 @@ export function ClientCard({ client, onUpdate }: ClientCardProps) {
                         <div key={comment.id} className="bg-muted/30 p-2 rounded border border-border/30">
                            <div className="flex justify-between items-baseline mb-1">
                               <span className="text-[10px] font-bold text-primary">{comment.author}</span>
-                              {/* FIX: Agora o formatDistanceToNow funcionará */}
                               <span className="text-[10px] text-muted-foreground">{formatDistanceToNow(new Date(comment.created_at), { locale: ptBR, addSuffix: true })}</span>
                            </div>
                            <p className="text-xs leading-relaxed whitespace-pre-wrap">{comment.content}</p>
