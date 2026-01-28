@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -35,7 +35,6 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 
-// --- Componente Item Sortável ---
 function SortableTaskItem({ task, onToggle, onEdit }: { task: TaskType, onToggle: (t: TaskType) => void, onEdit: (t: TaskType, title: string) => void }) {
   const {
     attributes,
@@ -66,12 +65,12 @@ function SortableTaskItem({ task, onToggle, onEdit }: { task: TaskType, onToggle
       ref={setNodeRef} 
       style={style} 
       className={cn(
-        "group/task flex items-center gap-3 p-1.5 rounded-md hover:bg-muted/40 transition-colors bg-card",
-        task.is_completed && "opacity-60"
+        "group/task flex items-center gap-2 p-1.5 rounded-md hover:bg-muted/40 transition-colors bg-card/50 border border-transparent hover:border-border/30",
+        task.is_completed && "opacity-60 bg-transparent"
       )}
     >
-      <button {...attributes} {...listeners} className="opacity-0 group-hover/task:opacity-100 cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground touch-none">
-        <GripVertical className="w-4 h-4" />
+      <button {...attributes} {...listeners} className="opacity-0 group-hover/task:opacity-100 cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground touch-none p-0.5">
+        <GripVertical className="w-3.5 h-3.5" />
       </button>
 
       <Checkbox 
@@ -85,18 +84,18 @@ function SortableTaskItem({ task, onToggle, onEdit }: { task: TaskType, onToggle
            <Input 
              value={editTitle} 
              onChange={(e) => setEditTitle(e.target.value)}
-             className="h-7 text-sm"
+             className="h-6 text-xs"
              autoFocus
              onKeyDown={(e) => e.key === 'Enter' && handleSave()}
            />
-           <Button size="icon" className="h-7 w-7" onClick={handleSave}><CheckCircle2 className="w-3 h-3"/></Button>
+           <Button size="icon" className="h-6 w-6" onClick={handleSave}><CheckCircle2 className="w-3 h-3"/></Button>
         </div>
       ) : (
         <span 
           onDoubleClick={() => setIsEditing(true)}
           className={cn(
-            "text-sm flex-1 cursor-pointer transition-all truncate",
-            task.is_completed ? "line-through text-muted-foreground/60" : "text-foreground"
+            "text-sm flex-1 cursor-text transition-all truncate select-none",
+            task.is_completed ? "line-through text-muted-foreground/60" : "text-foreground font-medium"
           )}
         >
           {task.title}
@@ -124,6 +123,7 @@ export function ClientCard({ client, onUpdate, initialExpanded = false, initialT
   const [isExpanded, setIsExpanded] = useState(initialExpanded)
   const [activeTab, setActiveTab] = useState<'tasks' | 'comments'>(initialTab)
   const [localTasks, setLocalTasks] = useState<TaskType[]>(client.tasks || [])
+  const commentsEndRef = useRef<HTMLDivElement>(null) // Ref para scroll
   
   useEffect(() => {
     setLocalTasks(client.tasks?.sort((a, b) => (a.position || 0) - (b.position || 0)) || [])
@@ -141,7 +141,17 @@ export function ClientCard({ client, onUpdate, initialExpanded = false, initialT
     }
   }, [initialExpanded, initialTab, client.id])
 
-  // Restante do código (estados e handlers)...
+  // Scroll automático para o fim da lista de comentários
+  useEffect(() => {
+    if (activeTab === 'comments' && isExpanded) {
+        // Pequeno timeout para garantir que o DOM renderizou
+        setTimeout(() => {
+            commentsEndRef.current?.scrollIntoView({ behavior: "smooth" })
+        }, 100)
+    }
+  }, [activeTab, isExpanded, client.comments])
+
+  // Estados
   const [isAddingTask, setIsAddingTask] = useState(false)
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [newComment, setNewComment] = useState('')
@@ -175,6 +185,7 @@ export function ClientCard({ client, onUpdate, initialExpanded = false, initialT
       const oldIndex = items.findIndex((i) => i.id === active.id)
       const newIndex = items.findIndex((i) => i.id === over.id)
       const newOrder = arrayMove(items, oldIndex, newIndex)
+      
       const updates = newOrder.map((task, index) => 
         fetch('/api/tasks', {
             method: 'PATCH',
@@ -261,6 +272,9 @@ export function ClientCard({ client, onUpdate, initialExpanded = false, initialT
     }
   }
 
+  // Ordenar comentários para exibir (Antigos -> Recentes)
+  const sortedComments = client.comments?.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()) || []
+
   return (
     <Card 
       id={`client-${client.id}`}
@@ -331,7 +345,7 @@ export function ClientCard({ client, onUpdate, initialExpanded = false, initialT
                  onClick={() => setActiveTab('comments')}
                  className={cn("text-xs font-medium pb-1 border-b-2 transition-colors", activeTab === 'comments' ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}
                >
-                 Comentários {client.comments?.length > 0 && `(${client.comments.length})`}
+                 Comentários {sortedComments.length > 0 && `(${sortedComments.length})`}
                </button>
             </div>
 
@@ -376,26 +390,32 @@ export function ClientCard({ client, onUpdate, initialExpanded = false, initialT
 
               {activeTab === 'comments' && (
                 <div className="space-y-3 pt-1">
-                   <div className="space-y-2 max-h-[150px] overflow-y-auto pr-2 custom-scrollbar">
-                      {client.comments?.length === 0 && (
-                        <p className="text-xs text-muted-foreground italic text-center py-2">Nenhum comentário.</p>
+                   {/* Área de Visualização Aumentada */}
+                   <div className="h-[300px] overflow-y-auto pr-2 custom-scrollbar flex flex-col gap-3">
+                      {sortedComments.length === 0 && (
+                        <p className="text-xs text-muted-foreground italic text-center py-10">Nenhum comentário. Comece a conversa.</p>
                       )}
-                      {client.comments?.map(comment => (
-                        <div key={comment.id} className="bg-muted/30 p-2 rounded border border-border/30">
-                           <div className="flex justify-between items-baseline mb-1">
-                              <span className="text-[10px] font-bold text-primary">{comment.author}</span>
-                              <span className="text-[10px] text-muted-foreground">{formatDistanceToNow(new Date(comment.created_at), { locale: ptBR, addSuffix: true })}</span>
+                      {sortedComments.map(comment => (
+                        <div key={comment.id} className="bg-muted/30 p-2.5 rounded-lg border border-border/40 text-xs">
+                           <div className="flex justify-between items-baseline mb-1.5">
+                              <span className="font-semibold text-primary">{comment.author}</span>
+                              <span className="text-[10px] text-muted-foreground opacity-70">
+                                {formatDistanceToNow(new Date(comment.created_at), { locale: ptBR, addSuffix: true })}
+                              </span>
                            </div>
-                           <p className="text-xs leading-relaxed whitespace-pre-wrap">{comment.content}</p>
+                           <p className="opacity-90 leading-relaxed whitespace-pre-wrap">{comment.content}</p>
                         </div>
                       ))}
+                      <div ref={commentsEndRef} /> {/* Âncora para scroll */}
                    </div>
-                   <div className="flex gap-2 items-end">
+                   
+                   {/* Área de Escrita Aumentada */}
+                   <div className="flex gap-2 items-end pt-2 border-t border-border/30">
                       <Textarea 
-                        placeholder="Escreva..." 
+                        placeholder="Escreva um comentário..." 
                         value={newComment}
                         onChange={(e) => setNewComment(e.target.value)}
-                        className="min-h-[36px] h-[36px] text-xs resize-none bg-background py-2"
+                        className="min-h-[80px] text-sm resize-none bg-background focus:ring-primary/20"
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' && !e.shiftKey) {
                             e.preventDefault();
@@ -403,8 +423,8 @@ export function ClientCard({ client, onUpdate, initialExpanded = false, initialT
                           }
                         }}
                       />
-                      <Button size="icon" className="h-9 w-9 shrink-0" onClick={handleAddComment} disabled={isSendingComment}>
-                        <ArrowUp className="w-4 h-4" />
+                      <Button size="icon" className="h-10 w-10 shrink-0 mb-1" onClick={handleAddComment} disabled={isSendingComment}>
+                        <ArrowUp className="w-5 h-5" />
                       </Button>
                    </div>
                 </div>
