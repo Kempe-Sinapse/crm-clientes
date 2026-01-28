@@ -1,5 +1,7 @@
 'use client'
 
+import React from "react"
+
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
@@ -67,8 +69,13 @@ export default function LoginPage() {
         toast.error('E-mail ou senha incorretos.')
       } else if (error.message.includes('invalid email')) {
         toast.error('O formato do e-mail é inválido. Verifique se há espaços ou erros.')
-      } else if (error.message.includes('Rate limit')) {
-        toast.error('Muitas tentativas. Aguarde um pouco.')
+      } else if (error.message.includes('rate limit') || error.message.includes('Email rate limit exceeded')) {
+        toast.error('Limite de tentativas excedido. Por favor, aguarde alguns minutos antes de tentar novamente.', {
+          duration: 5000,
+        })
+      } else if (error.message.includes('User already registered')) {
+        toast.error('Este e-mail já está cadastrado. Faça login ao invés de criar uma nova conta.')
+        setIsSignUp(false)
       } else {
         toast.error(error.message || 'Erro ao autenticar')
       }
