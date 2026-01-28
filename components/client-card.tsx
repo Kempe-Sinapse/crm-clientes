@@ -9,11 +9,11 @@ import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
 import { 
   ChevronDown, ChevronRight, Plus, Trash2, Calendar, 
-  MessageSquare, Clock, CheckCircle2, MoreHorizontal, Pencil, ArrowUp, ArrowDown 
+  MessageSquare, CheckCircle2, Pencil, ArrowUp, ArrowDown, Clock 
 } from 'lucide-react'
 import type { Client, Task as TaskType, Comment } from '@/lib/types'
 import { cn } from '@/lib/utils'
-import { formatDistanceToNow, addDays } from 'date-fns'
+import { formatDistanceToNow, addDays, format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 
 interface ClientCardProps {
@@ -37,17 +37,20 @@ export function ClientCard({ client, onUpdate }: ClientCardProps) {
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null)
   const [editingTitle, setEditingTitle] = useState('')
 
-  // Cálculos
+  // Cálculos de Progresso
   const totalTasks = client.tasks?.length || 0
   const completedTasks = client.tasks?.filter(t => t.is_completed).length || 0
-  const progress = totalTasks === 0 ? 0 : (completedTasks / totalTasks) * 100
   const isComplete = totalTasks > 0 && completedTasks === totalTasks
 
-  // Cálculo de Deadline (7 dias após criação)
-  const deadline = addDays(new Date(client.created_at), 7)
-  const daysLeft = Math.ceil((deadline.getTime() - new Date().getTime()) / (1000 * 3600 * 24))
+  // Cálculos de Data
+  const startDate = new Date(client.created_at)
+  const deadlineDate = addDays(startDate, 7)
+  const daysLeft = Math.ceil((deadlineDate.getTime() - new Date().getTime()) / (1000 * 3600 * 24))
+  
+  // Formatação: "28/01 -> 04/02"
+  const dateRangeString = `${format(startDate, 'dd/MM')} -> ${format(deadlineDate, 'dd/MM')}`
 
-  // --- Handlers de Tarefas ---
+  // --- Handlers ---
 
   const handleAddTask = async () => {
     if (!newTaskTitle.trim()) return
@@ -57,7 +60,6 @@ export function ClientCard({ client, onUpdate }: ClientCardProps) {
       body: JSON.stringify({
         client_id: client.id,
         title: newTaskTitle,
-        position: totalTasks // Adiciona no final
       })
     })
     setNewTaskTitle('')
@@ -70,10 +72,9 @@ export function ClientCard({ client, onUpdate }: ClientCardProps) {
     await fetch('/api/tasks', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: task.id, is_completed: newStatus }) // Usando is_completed correto
+      body: JSON.stringify({ id: task.id, is_completed: newStatus })
     })
     
-    // Verificar se completou tudo para mover de fase
     if (newStatus && completedTasks + 1 === totalTasks && client.status === 'setup') {
        if(confirm("Setup finalizado! Mover cliente para Carteira?")) {
           await fetch(`/api/clients/${client.id}`, {
@@ -97,7 +98,26 @@ export function ClientCard({ client, onUpdate }: ClientCardProps) {
     onUpdate()
   }
 
-  // --- Handler de Comentários (No Cliente) ---
+  const handleReorderTask = async (task: TaskType, direction: 'up' | 'down') => {
+    const sortedTasks = [...client.tasks].sort((a: any, b: any) => (a.position || 0) - (b.position || 0))
+    const currentIndex = sortedTasks.findIndex(t => t.id === task.id)
+    
+    if (direction === 'up' && currentIndex === 0) return
+    if (direction === 'down' && currentIndex === sortedTasks.length - 1) return
+
+    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1
+    const targetTask = sortedTasks[targetIndex]
+
+    // Troca de posições (Swap)
+    const newCurrentPos = targetTask.position
+    const newTargetPos = task.position
+
+    await Promise.all([
+        fetch('/api/tasks', { method: 'PATCH', body: JSON.stringify({ id: task.id, position: newCurrentPos }) }),
+        fetch('/api/tasks', { method: 'PATCH', body: JSON.stringify({ id: targetTask.id, position: newTargetPos }) })
+    ])
+    onUpdate()
+  }
 
   const handleAddComment = async () => {
     if (!newComment.trim()) return
@@ -126,58 +146,55 @@ export function ClientCard({ client, onUpdate }: ClientCardProps) {
   return (
     <Card 
       className={cn(
-        "group relative border-border/40 bg-card/40 hover:bg-card/80 transition-all duration-200 shadow-sm hover:shadow-md overflow-hidden",
+        "group relative border-border/40 bg-card/40 hover:bg-card/80 transition-all duration-200 shadow-sm overflow-hidden",
         isComplete && "border-emerald-500/20 bg-emerald-500/5"
       )}
     >
-      {/* Barra de progresso ultra-fina no topo */}
-      <div className="absolute top-0 left-0 right-0 h-[2px] bg-muted/50 w-full">
-        <div 
-          className={cn("h-full transition-all duration-500", isComplete ? "bg-emerald-500" : "bg-primary")} 
-          style={{ width: `${progress}%` }} 
-        />
-      </div>
-
       <div className="px-4 py-3">
-        <div className="flex items-center gap-3">
+        <div className="flex items-start gap-3">
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="text-muted-foreground hover:text-foreground transition-colors p-1 rounded-sm hover:bg-muted"
+            className="mt-1 text-muted-foreground hover:text-foreground transition-colors p-1 rounded-sm hover:bg-muted"
           >
             {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
           </button>
 
-          <div className="flex-1 cursor-pointer grid grid-cols-1 md:grid-cols-[1fr_auto] gap-2 items-center" onClick={() => setIsExpanded(!isExpanded)}>
-            
-            {/* Informações do Cliente */}
-            <div className="flex flex-col">
-              <div className="flex items-center gap-2">
+          {/* Cabeçalho do Card */}
+          <div className="flex-1 cursor-pointer" onClick={() => setIsExpanded(!isExpanded)}>
+            <div className="flex flex-col gap-1">
+              {/* Linha Superior: Nome e Status */}
+              <div className="flex items-center justify-between">
                 <h3 className="font-semibold text-sm text-foreground flex items-center gap-2">
                   {client.name}
                   {isComplete && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />}
                 </h3>
-                {client.status === 'setup' && (
-                  <Badge variant="secondary" className={cn("h-5 px-1.5 text-[10px] font-normal", daysLeft < 3 ? "text-red-500 bg-red-500/10" : "text-muted-foreground")}>
-                    {daysLeft > 0 ? `${daysLeft}d restantes` : 'Atrasado'}
-                  </Badge>
-                )}
+                
+                <div className="flex items-center gap-2">
+                   {client.status === 'setup' && (
+                      <Badge variant="outline" className={cn("h-5 px-1.5 text-[10px] font-normal border-border", daysLeft < 3 ? "text-red-500 bg-red-500/10 border-red-500/20" : "text-muted-foreground")}>
+                        {daysLeft > 0 ? `${daysLeft} dias restantes` : 'Atrasado'}
+                      </Badge>
+                   )}
+                   <span className="text-xs font-mono text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded">
+                     {completedTasks}/{totalTasks}
+                   </span>
+                </div>
               </div>
-              <p className="text-xs text-muted-foreground truncate">{client.email || 'Sem email'}</p>
-            </div>
 
-            {/* Status e Resumo */}
-            <div className="flex items-center gap-4 text-xs text-muted-foreground">
-               <div className="flex items-center gap-1.5">
-                 <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden hidden md:block">
-                    <div className="h-full bg-primary" style={{ width: `${progress}%` }} />
-                 </div>
-                 <span className="font-mono">{completedTasks}/{totalTasks}</span>
-               </div>
-               
-               <div className="flex items-center gap-1 hover:text-foreground transition-colors">
-                  <MessageSquare className="w-3.5 h-3.5" />
-                  <span>{client.comments?.length || 0}</span>
-               </div>
+              {/* Linha Inferior: Datas e Email */}
+              <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                 <span className="flex items-center gap-1 bg-primary/5 px-1.5 py-0.5 rounded text-primary/80 font-medium">
+                    <Calendar className="w-3 h-3" />
+                    {dateRangeString}
+                 </span>
+                 <span className="truncate max-w-[200px] opacity-70 hover:opacity-100">{client.email}</span>
+                 
+                 {client.comments?.length > 0 && (
+                   <span className="flex items-center gap-1 hover:text-foreground">
+                      <MessageSquare className="w-3 h-3" /> {client.comments.length}
+                   </span>
+                 )}
+              </div>
             </div>
           </div>
 
@@ -185,7 +202,7 @@ export function ClientCard({ client, onUpdate }: ClientCardProps) {
             variant="ghost"
             size="icon"
             onClick={handleDeleteClient}
-            className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+            className="h-7 w-7 -mt-1 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
           >
             <Trash2 className="w-3.5 h-3.5" />
           </Button>
@@ -193,33 +210,43 @@ export function ClientCard({ client, onUpdate }: ClientCardProps) {
 
         {/* Área Expansível */}
         {isExpanded && (
-          <div className="mt-4 pt-0 border-t border-border/40 animate-in slide-in-from-top-1 duration-200">
+          <div className="mt-3 pt-3 border-t border-border/40 animate-in slide-in-from-top-1 duration-200">
             
             {/* Abas Internas */}
-            <div className="flex gap-4 border-b border-border/40 px-2">
+            <div className="flex gap-4 border-b border-border/40 px-2 mb-2">
                <button 
                  onClick={() => setActiveTab('tasks')}
-                 className={cn("text-xs font-medium py-2 border-b-2 transition-colors", activeTab === 'tasks' ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}
+                 className={cn("text-xs font-medium pb-2 border-b-2 transition-colors", activeTab === 'tasks' ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}
                >
                  Checklist
                </button>
                <button 
                  onClick={() => setActiveTab('comments')}
-                 className={cn("text-xs font-medium py-2 border-b-2 transition-colors", activeTab === 'comments' ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}
+                 className={cn("text-xs font-medium pb-2 border-b-2 transition-colors", activeTab === 'comments' ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}
                >
-                 Comentários ({client.comments?.length || 0})
+                 Comentários
                </button>
             </div>
 
-            <div className="p-2 md:pl-8 mt-2">
+            <div className="pl-2 md:pl-6">
               {/* ABA: TAREFAS */}
               {activeTab === 'tasks' && (
-                <div className="space-y-1">
+                <div className="space-y-0.5">
                   {client.tasks?.sort((a: any, b: any) => (a.position || 0) - (b.position || 0)).map((task, index) => (
                     <div 
                       key={task.id} 
                       className="group/task flex items-center gap-3 p-1.5 rounded-md hover:bg-muted/40 transition-colors"
                     >
+                      {/* Botões de Reordenar (Só aparecem no hover) */}
+                      <div className="flex flex-col opacity-0 group-hover/task:opacity-100 -ml-5 mr-1 transition-opacity">
+                         <button onClick={() => handleReorderTask(task, 'up')} disabled={index === 0} className="hover:text-primary disabled:opacity-30">
+                            <ArrowUp className="w-2.5 h-2.5" />
+                         </button>
+                         <button onClick={() => handleReorderTask(task, 'down')} disabled={index === (client.tasks?.length || 0) - 1} className="hover:text-primary disabled:opacity-30">
+                            <ArrowDown className="w-2.5 h-2.5" />
+                         </button>
+                      </div>
+
                       <Checkbox 
                         checked={task.is_completed} 
                         onCheckedChange={() => handleToggleTask(task)}
@@ -249,16 +276,13 @@ export function ClientCard({ client, onUpdate }: ClientCardProps) {
                         </span>
                       )}
 
-                      {/* Botões de Ação da Tarefa */}
-                      <div className="opacity-0 group-hover/task:opacity-100 flex items-center gap-1 transition-opacity">
-                         <button 
-                           onClick={() => { setEditingTaskId(task.id); setEditingTitle(task.title) }}
-                           className="text-muted-foreground hover:text-primary p-1"
-                         >
-                           <Pencil className="w-3 h-3" />
-                         </button>
-                         {/* Futuramente: Adicionar Arrows para Reorder aqui */}
-                      </div>
+                      {/* Botão Editar (Lápis) */}
+                      <button 
+                        onClick={() => { setEditingTaskId(task.id); setEditingTitle(task.title) }}
+                        className="opacity-0 group-hover/task:opacity-100 text-muted-foreground hover:text-primary p-1 transition-opacity"
+                      >
+                        <Pencil className="w-3 h-3" />
+                      </button>
                     </div>
                   ))}
 
@@ -267,21 +291,21 @@ export function ClientCard({ client, onUpdate }: ClientCardProps) {
                     <div className="flex gap-2 items-center mt-2 pl-1.5">
                       <Input
                         autoFocus
-                        placeholder="Nova tarefa..."
+                        placeholder="Nova subtarefa..."
                         value={newTaskTitle}
                         onChange={(e) => setNewTaskTitle(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && handleAddTask()}
                         className="h-8 text-sm"
                       />
                       <Button size="sm" onClick={handleAddTask} className="h-8 text-xs">Salvar</Button>
-                      <Button size="sm" variant="ghost" onClick={() => setIsAddingTask(false)} className="h-8 text-xs">X</Button>
+                      <Button size="sm" variant="ghost" onClick={() => setIsAddingTask(false)} className="h-8 text-xs">Cancelar</Button>
                     </div>
                   ) : (
                     <button
                       onClick={() => setIsAddingTask(true)}
                       className="mt-2 text-xs text-muted-foreground hover:text-primary flex items-center gap-1 pl-1.5 transition-colors"
                     >
-                      <Plus className="w-3 h-3" /> Adicionar item
+                      <Plus className="w-3 h-3 mr-2" /> Adicionar item
                     </button>
                   )}
                 </div>
@@ -289,28 +313,28 @@ export function ClientCard({ client, onUpdate }: ClientCardProps) {
 
               {/* ABA: COMENTÁRIOS */}
               {activeTab === 'comments' && (
-                <div className="space-y-4">
-                   <div className="space-y-3 max-h-[200px] overflow-y-auto pr-2 custom-scrollbar">
+                <div className="space-y-3">
+                   <div className="space-y-2 max-h-[150px] overflow-y-auto pr-2 custom-scrollbar">
                       {client.comments?.length === 0 && (
-                        <p className="text-xs text-muted-foreground italic text-center py-4">Nenhum comentário ainda.</p>
+                        <p className="text-xs text-muted-foreground italic text-center py-2">Nenhum comentário.</p>
                       )}
                       {client.comments?.map(comment => (
-                        <div key={comment.id} className="bg-muted/30 p-2 rounded-md border border-border/30">
+                        <div key={comment.id} className="bg-muted/30 p-2 rounded border border-border/30">
                            <div className="flex justify-between items-baseline mb-1">
                               <span className="text-[10px] font-bold text-primary">{comment.author}</span>
                               <span className="text-[10px] text-muted-foreground">{formatDistanceToNow(new Date(comment.created_at), { locale: ptBR, addSuffix: true })}</span>
                            </div>
-                           <p className="text-xs text-foreground/90 leading-relaxed whitespace-pre-wrap">{comment.content}</p>
+                           <p className="text-xs leading-relaxed whitespace-pre-wrap">{comment.content}</p>
                         </div>
                       ))}
                    </div>
 
                    <div className="flex gap-2 items-end">
                       <Textarea 
-                        placeholder="Escreva uma observação..." 
+                        placeholder="Escreva..." 
                         value={newComment}
                         onChange={(e) => setNewComment(e.target.value)}
-                        className="min-h-[60px] text-xs resize-none bg-background"
+                        className="min-h-[40px] h-[40px] text-xs resize-none bg-background py-2"
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' && !e.shiftKey) {
                             e.preventDefault();
