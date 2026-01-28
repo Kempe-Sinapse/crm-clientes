@@ -13,7 +13,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const [isQb, setIsQb] = useState(false) // Alternar entre Login/Cadastro
+  const [isSignUp, setIsSignUp] = useState(false) // Mudei o nome de isQb para isSignUp para clareza
   const router = useRouter()
   const supabase = createClient()
 
@@ -21,28 +21,57 @@ export default function LoginPage() {
     e.preventDefault()
     setLoading(true)
 
+    // Limpa espaços em branco acidentais
+    const cleanEmail = email.trim()
+
     try {
-      if (isQb) {
+      if (isSignUp) {
         // Cadastro (Sign Up)
-        const { error } = await supabase.auth.signUp({
-          email,
+        const { data, error } = await supabase.auth.signUp({
+          email: cleanEmail,
           password,
+          options: {
+            // Isso garante que o usuário seja redirecionado de volta pra home após confirmar o email
+            emailRedirectTo: `${window.location.origin}/auth/callback`,
+          }
         })
+        
         if (error) throw error
-        toast.success('Conta criada! Verifique seu email ou faça login.')
+        
+        // Se o autoconfirm estiver ligado no Supabase, ele já loga direto. 
+        // Se não, ele avisa para checar o email.
+        if (data.user && !data.session) {
+            toast.success('Conta criada! Verifique seu e-mail para confirmar.')
+        } else {
+            toast.success('Conta criada com sucesso!')
+            router.push('/')
+            router.refresh()
+        }
+
       } else {
         // Login (Sign In)
         const { error } = await supabase.auth.signInWithPassword({
-          email,
+          email: cleanEmail,
           password,
         })
         if (error) throw error
+        
         toast.success('Login realizado com sucesso!')
         router.push('/')
         router.refresh()
       }
     } catch (error: any) {
-      toast.error(error.message || 'Erro ao autenticar')
+      console.error(error)
+      // Tratamento de mensagens de erro comuns do Supabase
+      if (error.message.includes('Invalid login credentials')) {
+        toast.error('E-mail ou senha incorretos.')
+      } else if (error.message.includes('invalid email')) {
+        toast.error('O formato do e-mail é inválido. Verifique se há espaços ou erros.')
+      } else if (error.message.includes('Rate limit')) {
+        toast.error('Muitas tentativas. Aguarde um pouco.')
+      } else {
+        toast.error(error.message || 'Erro ao autenticar')
+      }
     } finally {
       setLoading(false)
     }
@@ -56,7 +85,7 @@ export default function LoginPage() {
         <CardHeader className="text-center">
           <CardTitle className="text-2xl font-bold">Bem-vindo(a)</CardTitle>
           <CardDescription>
-            {isQb ? 'Crie sua conta para começar' : 'Entre para gerenciar seus clientes'}
+            {isSignUp ? 'Crie sua conta para começar' : 'Entre para gerenciar seus clientes'}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -79,19 +108,21 @@ export default function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 className="bg-muted/50"
+                minLength={6} // Supabase exige mínimo de 6 caracteres por padrão
               />
             </div>
             <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : (isQb ? 'Criar Conta' : 'Entrar')}
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : (isSignUp ? 'Criar Conta' : 'Entrar')}
             </Button>
           </form>
           
           <div className="mt-4 text-center text-sm text-muted-foreground">
             <button 
-              onClick={() => setIsQb(!isQb)}
+              type="button"
+              onClick={() => setIsSignUp(!isSignUp)}
               className="hover:text-primary hover:underline transition-all"
             >
-              {isQb ? 'Já tem conta? Faça Login' : 'Não tem conta? Cadastre-se'}
+              {isSignUp ? 'Já tem conta? Faça Login' : 'Não tem conta? Cadastre-se'}
             </button>
           </div>
         </CardContent>
