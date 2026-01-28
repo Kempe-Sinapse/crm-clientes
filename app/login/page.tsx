@@ -1,7 +1,6 @@
 'use client'
 
-import React from "react"
-
+import React, { useEffect } from "react"
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
@@ -15,15 +14,26 @@ export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const [isSignUp, setIsSignUp] = useState(false) // Mudei o nome de isQb para isSignUp para clareza
+  const [isSignUp, setIsSignUp] = useState(false)
   const router = useRouter()
   const supabase = createClient()
+
+  // Efeito para verificar se o usuário já está logado ao carregar a página
+  // O middleware já cuida disso no servidor, mas isso ajuda na experiência do cliente (SPA)
+  useEffect(() => {
+    const checkUser = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session) {
+        router.replace('/')
+      }
+    }
+    checkUser()
+  }, [router, supabase])
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
 
-    // Limpa espaços em branco acidentais
     const cleanEmail = email.trim()
 
     try {
@@ -33,21 +43,18 @@ export default function LoginPage() {
           email: cleanEmail,
           password,
           options: {
-            // Isso garante que o usuário seja redirecionado de volta pra home após confirmar o email
             emailRedirectTo: `${window.location.origin}/auth/callback`,
           }
         })
         
         if (error) throw error
         
-        // Se o autoconfirm estiver ligado no Supabase, ele já loga direto. 
-        // Se não, ele avisa para checar o email.
         if (data.user && !data.session) {
             toast.success('Conta criada! Verifique seu e-mail para confirmar.')
         } else {
             toast.success('Conta criada com sucesso!')
+            router.refresh() // Atualiza estado do servidor
             router.push('/')
-            router.refresh()
         }
 
       } else {
@@ -59,22 +66,19 @@ export default function LoginPage() {
         if (error) throw error
         
         toast.success('Login realizado com sucesso!')
+        router.refresh() // Importante: Atualiza os componentes do servidor com o novo cookie
         router.push('/')
-        router.refresh()
       }
     } catch (error: any) {
       console.error(error)
-      // Tratamento de mensagens de erro comuns do Supabase
       if (error.message.includes('Invalid login credentials')) {
         toast.error('E-mail ou senha incorretos.')
       } else if (error.message.includes('invalid email')) {
-        toast.error('O formato do e-mail é inválido. Verifique se há espaços ou erros.')
-      } else if (error.message.includes('rate limit') || error.message.includes('Email rate limit exceeded')) {
-        toast.error('Limite de tentativas excedido. Por favor, aguarde alguns minutos antes de tentar novamente.', {
-          duration: 5000,
-        })
+        toast.error('O formato do e-mail é inválido.')
+      } else if (error.message.includes('rate limit')) {
+        toast.error('Muitas tentativas. Aguarde um pouco.')
       } else if (error.message.includes('User already registered')) {
-        toast.error('Este e-mail já está cadastrado. Faça login ao invés de criar uma nova conta.')
+        toast.error('E-mail já cadastrado.')
         setIsSignUp(false)
       } else {
         toast.error(error.message || 'Erro ao autenticar')
@@ -90,7 +94,7 @@ export default function LoginPage() {
       
       <Card className="w-full max-w-md border-border/50 shadow-2xl backdrop-blur-sm bg-card/95">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold">Bem-vindo(a)</CardTitle>
+          <CardTitle className="text-2xl font-bold">Sinapse CRM</CardTitle>
           <CardDescription>
             {isSignUp ? 'Crie sua conta para começar' : 'Entre para gerenciar seus clientes'}
           </CardDescription>
@@ -115,7 +119,7 @@ export default function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 className="bg-muted/50"
-                minLength={6} // Supabase exige mínimo de 6 caracteres por padrão
+                minLength={6}
               />
             </div>
             <Button type="submit" className="w-full" disabled={loading}>
