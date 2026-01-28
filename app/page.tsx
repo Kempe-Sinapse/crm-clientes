@@ -6,8 +6,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ClientCard } from '@/components/client-card'
-import { UserProfile } from '@/components/user-profile'
-import { NotificationsNav } from '@/components/notifications-nav'
+import { UserProfile } from '@/components/user-profile' // Componente de Perfil
+import { NotificationsNav } from '@/components/notifications-nav' // Componente de Notificações
 import { Plus, Search, LayoutDashboard, ArrowUpDown } from 'lucide-react'
 import type { Client, Task as TaskType, Comment } from '@/lib/types'
 
@@ -25,7 +25,7 @@ function DashboardContent() {
   const [search, setSearch] = useState('')
   const [sortBy, setSortBy] = useState<'deadline' | 'alpha'>('deadline')
   
-  // Hooks para pegar parâmetros da URL (vindas da notificação)
+  // Captura cliques nas notificações via URL
   const searchParams = useSearchParams()
   const targetClientId = searchParams.get('client_id')
   const targetTab = searchParams.get('tab') as 'tasks' | 'comments' | undefined
@@ -37,10 +37,10 @@ function DashboardContent() {
       const data = await res.json()
       setClients(data.clients || [])
       
-      // Muda a aba automaticamente se o cliente da notificação estiver em Follow-up
+      // Se clicou numa notificação de um cliente em Follow-up, muda a aba
       if (targetClientId) {
           const targetClient = data.clients?.find((c: Client) => c.id === targetClientId)
-          if (targetClient && targetClient.status === 'follow_up') {
+          if (targetClient && targetClient.status === 'follow_up' && activeTab !== 'follow_up') {
               setActiveTab('follow_up')
           }
       }
@@ -89,6 +89,7 @@ function DashboardContent() {
 
   return (
     <div className="min-h-screen bg-background selection:bg-primary/20 text-foreground pb-20">
+      {/* Header Atualizado com Botões */}
       <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="mx-auto max-w-5xl px-4 md:px-6 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -109,8 +110,8 @@ function DashboardContent() {
       <main className="mx-auto max-w-5xl p-4 md:p-6 space-y-6">
         <div className="flex flex-col md:flex-row justify-between items-end md:items-center gap-4">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Clientes</h1>
-            <p className="text-muted-foreground text-sm">Gerencie o status dos clientes.</p>
+            <h1 className="text-2xl font-bold tracking-tight">Painel de Setup</h1>
+            <p className="text-muted-foreground text-sm">Gerencie o onboarding dos clientes.</p>
           </div>
           
           <div className="flex items-center gap-2 w-full md:w-auto">
