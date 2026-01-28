@@ -86,7 +86,7 @@ export function UserProfile() {
     router.refresh()
   }
 
-  // Se não houver usuário, mostra botão de login para garantir que algo apareça na tela
+  // Se não houver usuário logado, mostra botão para ir ao login
   if (!user) {
     return (
         <Button variant="ghost" size="icon" onClick={() => router.push('/login')} title="Fazer Login">
