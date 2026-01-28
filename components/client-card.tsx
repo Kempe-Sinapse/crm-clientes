@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
-import { ChevronDown, ChevronRight, Plus, Trash2, CheckCircle2, Loader2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, Plus, Trash2, Calendar, CheckCircle2 } from 'lucide-react'
 import { addDays, formatDistanceToNow, isPast } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import type { Client, Task as TaskType } from '@/lib/types'
@@ -18,20 +18,17 @@ interface ClientCardProps {
 
 export function ClientCard({ client, onUpdate }: ClientCardProps) {
   const [isExpanded, setIsExpanded] = useState(false)
-  
-  // Estados para adicionar item extra ao checklist
   const [isAddingTask, setIsAddingTask] = useState(false)
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [isSaving, setIsSaving] = useState(false)
 
-  // Cálculos de Prazo (7 dias)
+  // Cálculos de Prazo (7 dias a partir da criação)
   const deadlineDate = addDays(new Date(client.created_at), 7)
   const isOverdue = isPast(deadlineDate) && client.status === 'setup'
   
-  // Progresso do Checklist
+  // Lista de tarefas (Checklist)
   const checklistItems = client.tasks || []
-  // Nota: Verifique se no seu banco é 'is_completed' ou 'completed'. Ajustei para suportar ambos.
-  const completedCount = checklistItems.filter((t: any) => t.is_completed || t.completed).length
+  const completedCount = checklistItems.filter((t: any) => t.is_completed).length
   const totalCount = checklistItems.length
   const progress = totalCount === 0 ? 0 : (completedCount / totalCount) * 100
   const isAllDone = totalCount > 0 && completedCount === totalCount
@@ -155,7 +152,7 @@ export function ClientCard({ client, onUpdate }: ClientCardProps) {
                   className="h-8 bg-background"
                 />
                 <Button size="sm" onClick={handleAddItem} disabled={isSaving}>
-                   {isSaving ? <Loader2 className="w-3 h-3 animate-spin"/> : "Salvar"}
+                   {isSaving ? "..." : "Salvar"}
                 </Button>
                 <Button size="sm" variant="ghost" onClick={() => setIsAddingTask(false)}>Cancelar</Button>
               </div>
@@ -190,30 +187,28 @@ function ChecklistItem({ task, onUpdate }: { task: any, onUpdate: () => void }) 
 
     const toggleCheck = async () => {
         setIsLoading(true)
-        const isCurrentlyDone = task.is_completed || task.completed
+        // Correção crítica: usar is_completed para bater com o banco e a API
+        const newStatus = !task.is_completed
         await fetch('/api/tasks', {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
                 id: task.id, 
-                completed: !isCurrentlyDone, // Para compatibilidade
-                is_completed: !isCurrentlyDone // Para o banco novo
+                is_completed: newStatus 
             }) 
         })
         onUpdate()
         setIsLoading(false)
     }
 
-    const isDone = task.is_completed || task.completed
-
     return (
-        <div className={`flex items-center gap-3 p-2 rounded-md transition-colors ${isDone ? 'opacity-60 bg-muted/20' : 'hover:bg-muted/40'}`}>
+        <div className={`flex items-center gap-3 p-2 rounded-md transition-colors ${task.is_completed ? 'opacity-60 bg-muted/20' : 'hover:bg-muted/40'}`}>
             <Checkbox 
-                checked={isDone} 
+                checked={task.is_completed} 
                 onCheckedChange={toggleCheck}
                 disabled={isLoading}
             />
-            <span className={`text-sm flex-1 ${isDone ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
+            <span className={`text-sm flex-1 ${task.is_completed ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
                 {task.title}
             </span>
         </div>
