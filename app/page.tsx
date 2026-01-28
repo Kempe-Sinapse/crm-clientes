@@ -109,8 +109,8 @@ function DashboardContent() {
       <main className="mx-auto max-w-5xl p-4 md:p-6 space-y-6">
         <div className="flex flex-col md:flex-row justify-between items-end md:items-center gap-4">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Painel de Setup</h1>
-            <p className="text-muted-foreground text-sm">Gerencie o onboarding dos clientes.</p>
+            <h1 className="text-2xl font-bold tracking-tight">Clientes</h1>
+            <p className="text-muted-foreground text-sm">Gerencie o status dos clientes.</p>
           </div>
           
           <div className="flex items-center gap-2 w-full md:w-auto">
