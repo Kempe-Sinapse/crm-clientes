@@ -1,19 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
-const STANDARD_CHECKLIST = [
-  "Grupo/Boas Vindas (Coleta Dados)",
-  "Acesso Checkout",
-  "Workflow N8N",
-  "Afiliação/Webhooks",
-  "Setup Sinapse (Prod/Base Conhec.)",
-  "Aprovação Base Conhecimento",
-  "Chip/Meta API Oficial",
-  "Modelos Msg API",
-  "Config/Testes Finais",
-  "Go-Live (No Ar)"
-]
-
 export async function GET() {
   const supabase = await createClient()
   
@@ -21,23 +8,27 @@ export async function GET() {
     .from('clients')
     .select(`
       *,
-      tasks (*)
+      tasks (*),
+      comments (*) 
     `)
     .order('created_at', { ascending: false })
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  return NextResponse.json({ clients })
+  // Ordenar as tasks por posição (se existir) ou criação dentro do objeto
+  const processedClients = clients.map(client => ({
+    ...client,
+    tasks: client.tasks.sort((a: any, b: any) => (a.position || 0) - (b.position || 0))
+  }))
+
+  return NextResponse.json({ clients: processedClients })
 }
 
 export async function POST(request: Request) {
   const supabase = await createClient()
   const body = await request.json()
   
-  // 1. Criar o Cliente
-  const { data: client, error: clientError } = await supabase
+  const { data: client, error } = await supabase
     .from('clients')
     .insert({
       name: body.name,
@@ -47,28 +38,7 @@ export async function POST(request: Request) {
     .select()
     .single()
 
-  if (clientError) {
-    return NextResponse.json({ error: clientError.message }, { status: 500 })
-  }
-
-  // 2. Criar automaticamente o Checklist Padrão
-  if (client) {
-    const tasksToInsert = STANDARD_CHECKLIST.map((title, index) => ({
-      client_id: client.id,
-      title: title,
-      position: index,
-      is_completed: false,
-      deadline: null 
-    }))
-
-    const { error: tasksError } = await supabase
-      .from('tasks')
-      .insert(tasksToInsert)
-      
-    if (tasksError) {
-      console.error("Erro ao criar checklist:", tasksError)
-    }
-  }
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   return NextResponse.json({ client })
 }
