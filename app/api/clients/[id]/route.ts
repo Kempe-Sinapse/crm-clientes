@@ -22,26 +22,21 @@ export async function PATCH(
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  // 2. Lógica Especial: Se moveu para Carteira (follow-up), cria a primeira tarefa de 15 dias
+  // 2. Se moveu para Carteira ('follow-up'), cria a tarefa de 15 dias
   if (body.status === 'follow-up') {
+    // Remove tarefas antigas do setup (opcional, se quiser limpar a lista)
+    // await supabase.from('tasks').delete().eq('client_id', id)
+
     const deadline = addDays(new Date(), 15).toISOString()
     
-    // Verifica se já não existe uma tarefa pendente para não duplicar
-    const { count } = await supabase
-        .from('tasks')
-        .select('*', { count: 'exact', head: true })
-        .eq('client_id', id)
-        .eq('is_completed', false)
-
-    if (count === 0) {
-        await supabase.from('tasks').insert({
-        client_id: id,
-        title: 'Follow-up Quinzenal',
-        description: 'Contato de manutenção de carteira.',
-        deadline: deadline,
-        position: 0
-        })
-    }
+    await supabase.from('tasks').insert({
+      client_id: id,
+      title: 'Follow-up de Manutenção',
+      description: 'Contato quinzenal de carteira.',
+      deadline: deadline, // Define o prazo para 15 dias
+      position: 0,
+      is_completed: false
+    })
   }
 
   return NextResponse.json({ client })
