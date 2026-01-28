@@ -15,7 +15,7 @@ import type { Client, Task as TaskType, Comment } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { addDays, format, differenceInCalendarDays, formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import { toast } from 'sonner' // Adicionado para feedback visual
+import { toast } from 'sonner'
 
 // DND Kit Imports
 import {
@@ -123,30 +123,32 @@ interface ClientCardProps {
 export function ClientCard({ client, onUpdate, initialExpanded = false, initialTab = 'tasks' }: ClientCardProps) {
   const [isExpanded, setIsExpanded] = useState(initialExpanded)
   const [activeTab, setActiveTab] = useState<'tasks' | 'comments'>(initialTab)
-  const [localTasks, setLocalTasks] = useState<TaskType[]>(client.tasks || [])
+  const [localTasks, setLocalTasks] = useState<TaskType[]>([])
   const commentsEndRef = useRef<HTMLDivElement>(null) 
   
+  // Efeito para filtrar e ordenar tarefas
   useEffect(() => {
-    setLocalTasks(client.tasks?.sort((a, b) => (a.position || 0) - (b.position || 0)) || [])
-  }, [client.tasks])
+    let tasks = client.tasks || []
+    
+    // CORREÇÃO 1: Se for Carteira (follow-up), ESCONDER tarefas concluídas
+    if (client.status === 'follow-up') {
+      tasks = tasks.filter(t => !t.is_completed)
+    }
+    
+    setLocalTasks(tasks.sort((a, b) => (a.position || 0) - (b.position || 0)))
+  }, [client.tasks, client.status])
 
   useEffect(() => {
     if (initialExpanded) {
         setIsExpanded(true)
         if (initialTab) setActiveTab(initialTab)
-        
-        const element = document.getElementById(`client-${client.id}`)
-        if (element) {
-            setTimeout(() => element.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100)
-        }
+        setTimeout(() => document.getElementById(`client-${client.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100)
     }
   }, [initialExpanded, initialTab, client.id])
 
   useEffect(() => {
     if (activeTab === 'comments' && isExpanded) {
-        setTimeout(() => {
-            commentsEndRef.current?.scrollIntoView({ behavior: "smooth" })
-        }, 100)
+        setTimeout(() => commentsEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100)
     }
   }, [activeTab, isExpanded, client.comments])
 
@@ -162,16 +164,28 @@ export function ClientCard({ client, onUpdate, initialExpanded = false, initialT
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   )
 
-  const totalTasks = localTasks.length
-  const completedTasks = localTasks.filter(t => t.is_completed).length
+  const totalTasks = client.tasks?.length || 0
+  const completedTasks = client.tasks?.filter(t => t.is_completed).length || 0
   const isComplete = totalTasks > 0 && completedTasks === totalTasks
   
+  // Cálculo de prazos
   const startDate = new Date(client.created_at)
-  const deadlineDate = addDays(startDate, 7)
-  const daysLeft = differenceInCalendarDays(deadlineDate, new Date())
   
+  // Para carteira, o prazo é a tarefa mais próxima não concluída
+  const nextPendingTask = client.tasks?.filter(t => !t.is_completed).sort((a,b) => new Date(a.deadline || '').getTime() - new Date(b.deadline || '').getTime())[0]
+  
+  // Se estiver em setup, usa data de criação + 7 dias. Se follow-up, usa a task.
+  const activeDeadline = (client.status === 'follow-up' && nextPendingTask?.deadline) 
+      ? new Date(nextPendingTask.deadline) 
+      : addDays(startDate, 7)
+
+  const daysLeft = differenceInCalendarDays(activeDeadline, new Date())
+  
+  // CORREÇÃO 2: Estado "Adormecido" se o prazo for > 2 dias na Carteira
+  const isSleeping = client.status === 'follow-up' && daysLeft > 2
+
   const getDeadlineStyles = () => {
-    if (client.status !== 'setup') return "border-border text-muted-foreground"
+    if (isSleeping) return "bg-muted text-muted-foreground border-transparent opacity-70"
     if (daysLeft < 0) return "bg-red-950/30 border-red-900 text-red-500 shadow-[0_0_10px_rgba(220,38,38,0.4)] animate-pulse"
     if (daysLeft <= 2) return "bg-red-900/20 border-red-800 text-red-400 shadow-[0_0_8px_rgba(220,38,38,0.2)]"
     if (daysLeft <= 4) return "bg-orange-900/10 border-orange-800/50 text-orange-400 shadow-sm"
@@ -210,12 +224,14 @@ export function ClientCard({ client, onUpdate, initialExpanded = false, initialT
     setLocalTasks([...localTasks, optimisticTask])
     setNewTaskTitle('')
     setIsAddingTask(false)
+    
     await fetch('/api/tasks', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         client_id: client.id,
         title: optimisticTask.title,
+        deadline: client.status === 'follow-up' ? addDays(new Date(), 15) : null
       })
     })
     onUpdate()
@@ -223,7 +239,13 @@ export function ClientCard({ client, onUpdate, initialExpanded = false, initialT
 
   const handleToggleTask = async (task: TaskType) => {
     const newStatus = !task.is_completed
-    setLocalTasks(localTasks.map(t => t.id === task.id ? {...t, is_completed: newStatus} : t))
+    
+    // Atualização otimista: Remove da lista se for Carteira e estiver completando
+    if (client.status === 'follow-up' && newStatus) {
+        setLocalTasks(localTasks.filter(t => t.id !== task.id))
+    } else {
+        setLocalTasks(localTasks.map(t => t.id === task.id ? {...t, is_completed: newStatus} : t))
+    }
     
     await fetch('/api/tasks', {
       method: 'PATCH',
@@ -231,32 +253,24 @@ export function ClientCard({ client, onUpdate, initialExpanded = false, initialT
       body: JSON.stringify({ id: task.id, is_completed: newStatus })
     })
     
-    // Removido o bloco de confirmação automática (confirm) aqui
-    
     onUpdate()
   }
 
-  // Nova função para mover para Carteira
   const handleMoveToCarteira = async (e: React.MouseEvent) => {
-    e.stopPropagation() // Evita abrir/fechar o card
+    e.stopPropagation()
     setIsMoving(true)
     try {
       const res = await fetch(`/api/clients/${client.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        // AQUI ESTAVA O ERRO: mudado de 'follow_up' para 'follow-up' (com hífen)
         body: JSON.stringify({ status: 'follow-up' }) 
       })
 
-      if (!res.ok) {
-        const errorData = await res.json()
-        throw new Error(errorData.message || 'Erro ao mover cliente')
-      }
+      if (!res.ok) throw new Error('Erro ao mover')
 
       toast.success("Cliente movido para Carteira!")
       onUpdate()
     } catch (error) {
-      console.error(error)
       toast.error("Erro ao atualizar status.")
     } finally {
       setIsMoving(false)
@@ -294,7 +308,6 @@ export function ClientCard({ client, onUpdate, initialExpanded = false, initialT
     }
   }
 
-  // Ordenar comentários para exibir (Antigos -> Recentes)
   const sortedComments = client.comments?.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()) || []
 
   return (
@@ -302,7 +315,10 @@ export function ClientCard({ client, onUpdate, initialExpanded = false, initialT
       id={`client-${client.id}`}
       className={cn(
         "group relative border-border/40 bg-card/40 hover:bg-card/80 transition-all duration-200 shadow-sm overflow-hidden mb-2",
-        isComplete && "border-emerald-500/20 bg-emerald-500/5"
+        // Estilo especial para setup completo
+        isComplete && client.status === 'setup' && "border-emerald-500/20 bg-emerald-500/5",
+        // Estilo "Adormecido" para Carteira (opacidade reduzida se prazo longe)
+        isSleeping && "opacity-60 hover:opacity-100 bg-muted/20 border-border/20 grayscale-[0.5]"
       )}
     >
       <div className="px-3 py-2.5">
@@ -318,18 +334,37 @@ export function ClientCard({ client, onUpdate, initialExpanded = false, initialT
             <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-4 overflow-hidden">
                 <h3 className="font-semibold text-sm text-foreground truncate flex items-center gap-2 min-w-fit">
                   {client.name}
-                  {isComplete && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />}
+                  {isComplete && client.status === 'setup' && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />}
                 </h3>
                 <div className="flex items-center gap-2 text-xs text-muted-foreground/80 font-mono">
                     <span className="hidden md:inline text-border">|</span>
                     <Calendar className="w-3 h-3 opacity-70" />
-                    <span>{format(startDate, 'dd/MM')}</span>
-                    <span className="opacity-50">→</span>
-                    <span>{format(deadlineDate, 'dd/MM')}</span>
+                    {/* Se for carteira, mostra data da próxima tarefa */}
+                    {client.status === 'follow-up' && nextPendingTask?.deadline ? (
+                        <span>{format(new Date(nextPendingTask.deadline), 'dd/MM')}</span>
+                    ) : (
+                        <>
+                            <span>{format(startDate, 'dd/MM')}</span>
+                            <span className="opacity-50">→</span>
+                            <span>{format(addDays(startDate, 7), 'dd/MM')}</span>
+                        </>
+                    )}
                 </div>
             </div>
 
             <div className="flex items-center gap-3">
+               {/* CORREÇÃO 3: Badge de prazo agora aparece para Setup E Carteira */}
+               {(client.status === 'setup' || client.status === 'follow-up') && (
+                  <div className={cn(
+                      "px-2.5 py-0.5 rounded text-xs font-bold transition-all border flex items-center gap-1.5",
+                      getDeadlineStyles()
+                  )}>
+                    <Clock className="w-3 h-3" />
+                    {/* Se estiver dormindo (>2 dias), mostra dias. Se urgente, mostra destaque */}
+                    {isSleeping ? `${daysLeft}d` : (daysLeft > 0 ? `${daysLeft}d` : 'HOJE')}
+                  </div>
+               )}
+
                {/* Botão de Mover para Carteira: Só aparece se Setup + Completo */}
                {isComplete && client.status === 'setup' && (
                  <Button 
@@ -345,19 +380,13 @@ export function ClientCard({ client, onUpdate, initialExpanded = false, initialT
                     )}
                  </Button>
                )}
-
-               {!isComplete && client.status === 'setup' && (
-                  <div className={cn(
-                      "px-2.5 py-0.5 rounded text-xs font-bold transition-all border flex items-center gap-1.5",
-                      getDeadlineStyles()
-                  )}>
-                    <Clock className="w-3 h-3" />
-                    {daysLeft > 0 ? `${daysLeft}d` : 'HOJE'}
-                  </div>
-               )}
                
+               {/* Contador de Tarefas */}
                <div className="text-xs font-medium text-muted-foreground bg-muted/50 px-2 py-0.5 rounded min-w-[3rem] text-center">
-                 {completedTasks}/{totalTasks}
+                 {client.status === 'follow-up' 
+                    ? localTasks.length // Na carteira, mostra quantas pendentes
+                    : `${completedTasks}/${totalTasks}` // No setup, mostra progresso
+                 }
                </div>
                
                <Button
@@ -394,6 +423,9 @@ export function ClientCard({ client, onUpdate, initialExpanded = false, initialT
                 <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                     <SortableContext items={localTasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
                         <div className="space-y-1">
+                        {localTasks.length === 0 && client.status === 'follow-up' && (
+                            <p className="text-xs text-muted-foreground italic pl-1">Aguardando próximo ciclo quinzenal.</p>
+                        )}
                         {localTasks.map((task) => (
                             <SortableTaskItem 
                                 key={task.id} 
@@ -430,10 +462,10 @@ export function ClientCard({ client, onUpdate, initialExpanded = false, initialT
 
               {activeTab === 'comments' && (
                 <div className="space-y-3 pt-1">
-                   {/* Área de Visualização Aumentada */}
+                   {/* Comentários */}
                    <div className="h-[300px] overflow-y-auto pr-2 custom-scrollbar flex flex-col gap-3">
                       {sortedComments.length === 0 && (
-                        <p className="text-xs text-muted-foreground italic text-center py-10">Nenhum comentário. Comece a conversa.</p>
+                        <p className="text-xs text-muted-foreground italic text-center py-10">Nenhum comentário.</p>
                       )}
                       {sortedComments.map(comment => (
                         <div key={comment.id} className="bg-muted/30 p-2.5 rounded-lg border border-border/40 text-xs">
@@ -446,10 +478,9 @@ export function ClientCard({ client, onUpdate, initialExpanded = false, initialT
                            <p className="opacity-90 leading-relaxed whitespace-pre-wrap">{comment.content}</p>
                         </div>
                       ))}
-                      <div ref={commentsEndRef} /> {/* Âncora para scroll */}
+                      <div ref={commentsEndRef} />
                    </div>
                    
-                   {/* Área de Escrita Aumentada */}
                    <div className="flex gap-2 items-end pt-2 border-t border-border/30">
                       <Textarea 
                         placeholder="Escreva um comentário..." 
