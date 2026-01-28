@@ -22,7 +22,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { User, LogOut, Loader2 } from 'lucide-react'
+import { User, LogOut, Loader2, LogIn } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 
@@ -74,7 +74,6 @@ export function UserProfile() {
       toast.success("Perfil atualizado!")
       setIsOpen(false)
       setPassword('')
-      // Atualiza o estado local para refletir a mudança imediatamente
       setUser((prev: any) => ({ ...prev, user_metadata: { ...prev.user_metadata, full_name: fullName } }))
     }
     setLoading(false)
@@ -82,15 +81,23 @@ export function UserProfile() {
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
+    setUser(null)
     router.push('/login')
     router.refresh()
   }
 
-  if (!user) return null
+  // Se não houver usuário, mostra botão de login para garantir que algo apareça na tela
+  if (!user) {
+    return (
+        <Button variant="ghost" size="icon" onClick={() => router.push('/login')} title="Fazer Login">
+            <LogIn className="h-5 w-5" />
+        </Button>
+    )
+  }
 
   const initials = fullName
     ? fullName.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()
-    : 'U'
+    : user.email?.slice(0, 2).toUpperCase() || 'U'
 
   return (
     <>
@@ -126,7 +133,7 @@ export function UserProfile() {
       </DropdownMenu>
 
       <Dialog open={isOpen} onOpenChange={(val) => {
-        if (mode === 'onboarding' && !val) return // Impede fechar no onboarding
+        if (mode === 'onboarding' && !val) return
         setIsOpen(val)
       }}>
         <DialogContent className="sm:max-w-[425px]">
