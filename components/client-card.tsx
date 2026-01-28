@@ -115,10 +115,48 @@ function SortableTaskItem({ task, onToggle, onEdit }: { task: TaskType, onToggle
   )
 }
 
-// --- Componente Principal ---
+// ... imports (mantenha os existentes)
+// Adicione activeTab prop se ainda não tiver, ou use a lógica abaixo
+
 interface ClientCardProps {
   client: Client & { tasks: TaskType[], comments: Comment[] }
   onUpdate: () => void
+  initialExpanded?: boolean // Nova prop
+  initialTab?: 'tasks' | 'comments' // Nova prop
+}
+
+export function ClientCard({ client, onUpdate, initialExpanded = false, initialTab = 'tasks' }: ClientCardProps) {
+  // Inicialize o estado com as props
+  const [isExpanded, setIsExpanded] = useState(initialExpanded)
+  const [activeTab, setActiveTab] = useState<'tasks' | 'comments'>(initialTab)
+  
+  // Efeito para reagir a mudanças nas props (ex: quando clica na notificação)
+  useEffect(() => {
+    if (initialExpanded) {
+        setIsExpanded(true)
+        if (initialTab) setActiveTab(initialTab)
+        
+        // Scroll suave até o card
+        const element = document.getElementById(`client-${client.id}`)
+        if (element) {
+            setTimeout(() => element.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100)
+        }
+    }
+  }, [initialExpanded, initialTab, client.id])
+
+  // ... (Resto do código do componente: states, handlers, return...)
+  // ...
+  // IMPORTANTE: Adicione o id no elemento raiz do Card para o scroll funcionar:
+  return (
+    <Card 
+      id={`client-${client.id}`} // <--- ADICIONE ISSO
+      className={cn(
+        // ... classes existentes
+      )}
+    >
+      {/* ... conteúdo do card ... */}
+    </Card>
+  )
 }
 
 export function ClientCard({ client, onUpdate }: ClientCardProps) {
