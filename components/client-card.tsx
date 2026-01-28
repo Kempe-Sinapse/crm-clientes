@@ -13,7 +13,8 @@ import {
 } from 'lucide-react'
 import type { Client, Task as TaskType, Comment } from '@/lib/types'
 import { cn } from '@/lib/utils'
-import { addDays, format, differenceInCalendarDays } from 'date-fns'
+// FIX: Adicionado formatDistanceToNow na importação abaixo
+import { addDays, format, differenceInCalendarDays, formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 
 // DND Kit Imports
@@ -173,8 +174,7 @@ export function ClientCard({ client, onUpdate }: ClientCardProps) {
       const newIndex = items.findIndex((i) => i.id === over.id)
       const newOrder = arrayMove(items, oldIndex, newIndex)
       
-      // Persistir a nova ordem no backend (Promise.all para atualizar posições)
-      // Nota: Em produção, o ideal é enviar apenas os IDs na nova ordem para um endpoint 'batch'
+      // Persistir a nova ordem no backend
       const updates = newOrder.map((task, index) => 
         fetch('/api/tasks', {
             method: 'PATCH',
@@ -182,7 +182,7 @@ export function ClientCard({ client, onUpdate }: ClientCardProps) {
             body: JSON.stringify({ id: task.id, position: index })
         })
       )
-      Promise.all(updates).then(() => onUpdate()) // Atualiza dados globais após salvar
+      Promise.all(updates).then(() => onUpdate()) 
 
       return newOrder
     })
@@ -406,6 +406,7 @@ export function ClientCard({ client, onUpdate }: ClientCardProps) {
                         <div key={comment.id} className="bg-muted/30 p-2 rounded border border-border/30">
                            <div className="flex justify-between items-baseline mb-1">
                               <span className="text-[10px] font-bold text-primary">{comment.author}</span>
+                              {/* FIX: Agora o formatDistanceToNow funcionará */}
                               <span className="text-[10px] text-muted-foreground">{formatDistanceToNow(new Date(comment.created_at), { locale: ptBR, addSuffix: true })}</span>
                            </div>
                            <p className="text-xs leading-relaxed whitespace-pre-wrap">{comment.content}</p>
