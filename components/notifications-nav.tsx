@@ -21,8 +21,7 @@ export function NotificationsNav() {
   const supabase = createClient()
 
   const fetchNotifications = async () => {
-    // Busca últimos 10 comentários (num app real, filtraria por 'lido')
-    // Trazendo também o nome do cliente associado
+    // Busca os últimos comentários (incluindo o nome do cliente)
     const { data: comments } = await supabase
       .from('comments')
       .select(`
@@ -34,16 +33,15 @@ export function NotificationsNav() {
 
     if (comments) {
       setNotifications(comments)
-      // Exemplo simples: conta todos como não lidos por enquanto
-      // Num app real, você compararia com um campo 'last_read_at' do usuário
-      setUnreadCount(comments.length) 
+      // Lógica simples: considera os 10 últimos como "recentes"
+      setUnreadCount(comments.length)
     }
   }
 
   useEffect(() => {
     fetchNotifications()
     
-    // Inscreve para novos comentários em tempo real
+    // Assina atualizações em tempo real na tabela de comentários
     const channel = supabase
       .channel('public:comments')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'comments' }, () => {
@@ -58,7 +56,7 @@ export function NotificationsNav() {
 
   const handleNotificationClick = (clientId: string) => {
     setIsOpen(false)
-    // Redireciona passando parâmetros na URL para abrir o card certo
+    // Redireciona com parâmetros para abrir o card e a aba certa
     router.push(`/?client_id=${clientId}&tab=comments&t=${Date.now()}`) 
   }
 
@@ -75,12 +73,12 @@ export function NotificationsNav() {
       <PopoverContent className="w-80 p-0" align="end">
         <div className="flex items-center justify-between px-4 py-3 border-b">
           <span className="font-semibold text-sm">Notificações</span>
-          {unreadCount > 0 && <span className="text-xs text-muted-foreground">{unreadCount} novas</span>}
+          {unreadCount > 0 && <span className="text-xs text-muted-foreground">{unreadCount} recentes</span>}
         </div>
         <div className="max-h-[300px] overflow-y-auto">
           {notifications.length === 0 ? (
             <div className="p-4 text-center text-sm text-muted-foreground">
-              Nenhuma notificação.
+              Nenhuma notificação recente.
             </div>
           ) : (
             <div className="grid">
@@ -90,14 +88,14 @@ export function NotificationsNav() {
                   className="flex items-start gap-3 p-3 text-left hover:bg-muted/50 transition-colors border-b last:border-0"
                   onClick={() => handleNotificationClick(notif.client_id)}
                 >
-                  <div className="mt-1 bg-primary/10 p-1.5 rounded-full text-primary">
+                  <div className="mt-1 bg-primary/10 p-1.5 rounded-full text-primary shrink-0">
                     <MessageSquare className="h-3 w-3" />
                   </div>
-                  <div className="flex-1 space-y-1">
-                    <p className="text-xs font-medium">
-                      <span className="font-bold">{notif.author}</span> comentou em <span className="text-primary">{notif.clients?.name}</span>
+                  <div className="flex-1 space-y-1 min-w-0">
+                    <p className="text-xs font-medium truncate">
+                      <span className="font-bold">{notif.author || 'Alguém'}</span> em <span className="text-primary">{notif.clients?.name}</span>
                     </p>
-                    <p className="text-xs text-muted-foreground line-clamp-2">
+                    <p className="text-xs text-muted-foreground line-clamp-2 break-words">
                       "{notif.content}"
                     </p>
                     <p className="text-[10px] text-muted-foreground opacity-70">

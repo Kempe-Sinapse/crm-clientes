@@ -22,17 +22,17 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { User, Settings, LogOut, Loader2 } from 'lucide-react'
+import { User, LogOut, Loader2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 
 export function UserProfile() {
   const [user, setUser] = useState<any>(null)
-  const [isOpen, setIsOpen] = useState(false) // Controla o Dialog
+  const [isOpen, setIsOpen] = useState(false)
   const [fullName, setFullName] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const [mode, setMode] = useState<'onboarding' | 'edit'>('onboarding') // onboarding = forçado, edit = voluntário
+  const [mode, setMode] = useState<'onboarding' | 'edit'>('onboarding')
 
   const supabase = createClient()
   const router = useRouter()
@@ -44,7 +44,6 @@ export function UserProfile() {
         setUser(user)
         const name = user.user_metadata?.full_name
         if (!name) {
-          // Se não tem nome, abre o modo onboarding
           setMode('onboarding')
           setIsOpen(true)
         } else {
@@ -72,25 +71,25 @@ export function UserProfile() {
     if (error) {
       toast.error("Erro ao atualizar perfil")
     } else {
-      toast.success("Perfil atualizado com sucesso!")
+      toast.success("Perfil atualizado!")
       setIsOpen(false)
       setPassword('')
-      // Atualiza estado local
-      setUser({ ...user, user_metadata: { ...user.user_metadata, full_name: fullName } })
+      // Atualiza o estado local para refletir a mudança imediatamente
+      setUser((prev: any) => ({ ...prev, user_metadata: { ...prev.user_metadata, full_name: fullName } }))
     }
     setLoading(false)
   }
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
+    router.push('/login')
     router.refresh()
   }
 
   if (!user) return null
 
-  // Iniciais para o Avatar
   const initials = fullName
-    ? fullName.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()
+    ? fullName.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()
     : 'U'
 
   return (
@@ -116,7 +115,7 @@ export function UserProfile() {
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => { setMode('edit'); setIsOpen(true) }}>
             <User className="mr-2 h-4 w-4" />
-            <span>Perfil</span>
+            <span>Editar Perfil</span>
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={handleLogout} className="text-destructive focus:text-destructive">
@@ -127,8 +126,7 @@ export function UserProfile() {
       </DropdownMenu>
 
       <Dialog open={isOpen} onOpenChange={(val) => {
-        // No modo onboarding, não pode fechar clicando fora
-        if (mode === 'onboarding' && !val) return 
+        if (mode === 'onboarding' && !val) return // Impede fechar no onboarding
         setIsOpen(val)
       }}>
         <DialogContent className="sm:max-w-[425px]">
@@ -138,8 +136,8 @@ export function UserProfile() {
             </DialogTitle>
             <DialogDescription>
               {mode === 'onboarding' 
-                ? 'Para começar, precisamos saber como você gostaria de ser chamado.' 
-                : 'Faça alterações no seu perfil aqui.'}
+                ? 'Para continuar, nos diga como você quer ser chamado.' 
+                : 'Atualize suas informações abaixo.'}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
@@ -168,7 +166,7 @@ export function UserProfile() {
           <DialogFooter>
             <Button onClick={handleSave} disabled={loading}>
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Salvar Alterações
+              Salvar
             </Button>
           </DialogFooter>
         </DialogContent>
