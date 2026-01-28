@@ -1,7 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
-// Lista de tarefas padrão (Checklist do Cliente)
 const STANDARD_CHECKLIST = [
   "Grupo/Boas Vindas (Coleta Dados)",
   "Acesso Checkout",
@@ -18,7 +17,6 @@ const STANDARD_CHECKLIST = [
 export async function GET() {
   const supabase = await createClient()
   
-  // Trazemos o cliente e suas tarefas (checklist)
   const { data: clients, error } = await supabase
     .from('clients')
     .select(`
@@ -38,7 +36,7 @@ export async function POST(request: Request) {
   const supabase = await createClient()
   const body = await request.json()
   
-  // 1. Criar o Cliente (Tarefa Mãe)
+  // 1. Criar o Cliente
   const { data: client, error: clientError } = await supabase
     .from('clients')
     .insert({
