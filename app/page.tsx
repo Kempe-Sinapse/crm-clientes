@@ -6,10 +6,11 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ClientCard } from '@/components/client-card'
-import { UserProfile } from '@/components/user-profile' // Componente de Perfil
-import { NotificationsNav } from '@/components/notifications-nav' // Componente de Notificações
+import { UserProfile } from '@/components/user-profile' 
+import { NotificationsNav } from '@/components/notifications-nav' 
 import { Plus, Search, LayoutDashboard, ArrowUpDown } from 'lucide-react'
 import type { Client, Task as TaskType, Comment } from '@/lib/types'
+import { differenceInCalendarDays } from 'date-fns'
 
 type ClientWithRelations = Client & {
   tasks: TaskType[]
@@ -25,7 +26,6 @@ function DashboardContent() {
   const [search, setSearch] = useState('')
   const [sortBy, setSortBy] = useState<'deadline' | 'alpha'>('deadline')
   
-  // Captura cliques nas notificações via URL
   const searchParams = useSearchParams()
   const targetClientId = searchParams.get('client_id')
   const targetTab = searchParams.get('tab') as 'tasks' | 'comments' | undefined
@@ -37,7 +37,6 @@ function DashboardContent() {
       const data = await res.json()
       setClients(data.clients || [])
       
-      // Se clicou numa notificação de um cliente em Follow-up, muda a aba
       if (targetClientId) {
           const targetClient = data.clients?.find((c: Client) => c.id === targetClientId)
           if (targetClient && targetClient.status === 'follow_up' && activeTab !== 'follow_up') {
@@ -77,6 +76,18 @@ function DashboardContent() {
       (c.email && c.email.toLowerCase().includes(search.toLowerCase()))
     )
     .sort((a, b) => {
+      // Ordenação prioritária para Carteira (Active vs Sleeping)
+      if (activeTab === 'follow_up') {
+         const getUrgency = (client: ClientWithRelations) => {
+            const nextTask = client.tasks.filter(t => !t.is_completed).sort((t1, t2) => new Date(t1.deadline || '').getTime() - new Date(t2.deadline || '').getTime())[0]
+            if (!nextTask) return 9999 // Sleeping
+            const days = differenceInCalendarDays(new Date(nextTask.deadline!), new Date())
+            // Se dias <= 2, considera muito urgente (Ativo)
+            return days 
+         }
+         return getUrgency(a) - getUrgency(b)
+      }
+
       if (sortBy === 'alpha') {
         return a.name.localeCompare(b.name)
       } else {
@@ -89,7 +100,6 @@ function DashboardContent() {
 
   return (
     <div className="min-h-screen bg-background selection:bg-primary/20 text-foreground pb-20">
-      {/* Header Atualizado com Botões */}
       <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="mx-auto max-w-5xl px-4 md:px-6 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2">
