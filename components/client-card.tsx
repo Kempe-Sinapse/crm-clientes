@@ -5,16 +5,17 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
 import { 
   ChevronDown, ChevronRight, Plus, Trash2, Calendar, 
-  MessageSquare, CheckCircle2, GripVertical, Pencil, ArrowUp, Clock 
+  CheckCircle2, GripVertical, Pencil, ArrowUp, Clock,
+  ArrowRightCircle
 } from 'lucide-react'
 import type { Client, Task as TaskType, Comment } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { addDays, format, differenceInCalendarDays, formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
+import { toast } from 'sonner' // Adicionado para feedback visual
 
 // DND Kit Imports
 import {
@@ -123,7 +124,7 @@ export function ClientCard({ client, onUpdate, initialExpanded = false, initialT
   const [isExpanded, setIsExpanded] = useState(initialExpanded)
   const [activeTab, setActiveTab] = useState<'tasks' | 'comments'>(initialTab)
   const [localTasks, setLocalTasks] = useState<TaskType[]>(client.tasks || [])
-  const commentsEndRef = useRef<HTMLDivElement>(null) // Ref para scroll
+  const commentsEndRef = useRef<HTMLDivElement>(null) 
   
   useEffect(() => {
     setLocalTasks(client.tasks?.sort((a, b) => (a.position || 0) - (b.position || 0)) || [])
@@ -141,10 +142,8 @@ export function ClientCard({ client, onUpdate, initialExpanded = false, initialT
     }
   }, [initialExpanded, initialTab, client.id])
 
-  // Scroll automático para o fim da lista de comentários
   useEffect(() => {
     if (activeTab === 'comments' && isExpanded) {
-        // Pequeno timeout para garantir que o DOM renderizou
         setTimeout(() => {
             commentsEndRef.current?.scrollIntoView({ behavior: "smooth" })
         }, 100)
@@ -156,6 +155,7 @@ export function ClientCard({ client, onUpdate, initialExpanded = false, initialT
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [newComment, setNewComment] = useState('')
   const [isSendingComment, setIsSendingComment] = useState(false)
+  const [isMoving, setIsMoving] = useState(false)
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -224,21 +224,43 @@ export function ClientCard({ client, onUpdate, initialExpanded = false, initialT
   const handleToggleTask = async (task: TaskType) => {
     const newStatus = !task.is_completed
     setLocalTasks(localTasks.map(t => t.id === task.id ? {...t, is_completed: newStatus} : t))
+    
     await fetch('/api/tasks', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: task.id, is_completed: newStatus })
     })
-    if (newStatus && completedTasks + 1 === totalTasks && client.status === 'setup') {
-       if(confirm("Setup finalizado! Mover cliente para Carteira?")) {
-          await fetch(`/api/clients/${client.id}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status: 'follow_up' })
-          })
-       }
-    }
+    
+    // Removido o bloco de confirmação automática (confirm) aqui
+    
     onUpdate()
+  }
+
+  // Nova função para mover para Carteira
+  const handleMoveToCarteira = async (e: React.MouseEvent) => {
+    e.stopPropagation() // Evita abrir/fechar o card
+    setIsMoving(true)
+    try {
+      const res = await fetch(`/api/clients/${client.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        // AQUI ESTAVA O ERRO: mudado de 'follow_up' para 'follow-up' (com hífen)
+        body: JSON.stringify({ status: 'follow-up' }) 
+      })
+
+      if (!res.ok) {
+        const errorData = await res.json()
+        throw new Error(errorData.message || 'Erro ao mover cliente')
+      }
+
+      toast.success("Cliente movido para Carteira!")
+      onUpdate()
+    } catch (error) {
+      console.error(error)
+      toast.error("Erro ao atualizar status.")
+    } finally {
+      setIsMoving(false)
+    }
   }
 
   const handleEditTask = async (task: TaskType, newTitle: string) => {
@@ -308,7 +330,23 @@ export function ClientCard({ client, onUpdate, initialExpanded = false, initialT
             </div>
 
             <div className="flex items-center gap-3">
-               {client.status === 'setup' && (
+               {/* Botão de Mover para Carteira: Só aparece se Setup + Completo */}
+               {isComplete && client.status === 'setup' && (
+                 <Button 
+                    size="sm" 
+                    className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white animate-in zoom-in duration-300"
+                    onClick={handleMoveToCarteira}
+                    disabled={isMoving}
+                 >
+                    {isMoving ? 'Movendo...' : (
+                        <>
+                            Carteira <ArrowRightCircle className="w-3.5 h-3.5 ml-1.5" />
+                        </>
+                    )}
+                 </Button>
+               )}
+
+               {!isComplete && client.status === 'setup' && (
                   <div className={cn(
                       "px-2.5 py-0.5 rounded text-xs font-bold transition-all border flex items-center gap-1.5",
                       getDeadlineStyles()
@@ -317,9 +355,11 @@ export function ClientCard({ client, onUpdate, initialExpanded = false, initialT
                     {daysLeft > 0 ? `${daysLeft}d` : 'HOJE'}
                   </div>
                )}
+               
                <div className="text-xs font-medium text-muted-foreground bg-muted/50 px-2 py-0.5 rounded min-w-[3rem] text-center">
                  {completedTasks}/{totalTasks}
                </div>
+               
                <Button
                 variant="ghost"
                 size="icon"
