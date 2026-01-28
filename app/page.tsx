@@ -1,21 +1,22 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select" // Importante: Se não tiver o componente, use um select HTML nativo ou instale
 import { ClientCard } from '@/components/client-card'
-import { Plus, Search, LayoutDashboard, ArrowUpDown, Filter } from 'lucide-react'
+import { UserProfile } from '@/components/user-profile'
+import { NotificationsNav } from '@/components/notifications-nav'
+import { Plus, Search, LayoutDashboard, ArrowUpDown } from 'lucide-react'
 import type { Client, Task as TaskType, Comment } from '@/lib/types'
 
-// Definição estendida do tipo para incluir as relações
 type ClientWithRelations = Client & {
   tasks: TaskType[]
   comments: Comment[]
 }
 
-export default function Home() {
+function DashboardContent() {
   const [clients, setClients] = useState<ClientWithRelations[]>([])
   const [isAddingClient, setIsAddingClient] = useState(false)
   const [newClientName, setNewClientName] = useState('')
@@ -23,12 +24,26 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState('setup')
   const [search, setSearch] = useState('')
   const [sortBy, setSortBy] = useState<'deadline' | 'alpha'>('deadline')
+  
+  // Hooks para pegar parâmetros da URL (vindas da notificação)
+  const searchParams = useSearchParams()
+  const targetClientId = searchParams.get('client_id')
+  const targetTab = searchParams.get('tab') as 'tasks' | 'comments' | undefined
+  const timestamp = searchParams.get('t')
 
   const fetchClients = async () => {
     try {
       const res = await fetch('/api/clients')
       const data = await res.json()
       setClients(data.clients || [])
+      
+      // Muda a aba automaticamente se o cliente da notificação estiver em Follow-up
+      if (targetClientId) {
+          const targetClient = data.clients?.find((c: Client) => c.id === targetClientId)
+          if (targetClient && targetClient.status === 'follow_up') {
+              setActiveTab('follow_up')
+          }
+      }
     } catch (error) {
       console.error("Failed to fetch", error)
     }
@@ -36,7 +51,7 @@ export default function Home() {
 
   useEffect(() => {
     fetchClients()
-  }, [])
+  }, [targetClientId, timestamp])
 
   const handleAddClient = async () => {
     if (!newClientName.trim()) return
@@ -56,7 +71,6 @@ export default function Home() {
     fetchClients()
   }
 
-  // Lógica de Filtro e Ordenação
   const processedClients = clients
     .filter(c => 
       c.name.toLowerCase().includes(search.toLowerCase()) || 
@@ -66,7 +80,6 @@ export default function Home() {
       if (sortBy === 'alpha') {
         return a.name.localeCompare(b.name)
       } else {
-        // Deadline: Mais antigos (criados antes) aparecem primeiro pois o prazo está acabando
         return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
       }
     })
@@ -75,22 +88,25 @@ export default function Home() {
   const followUpClients = processedClients.filter(c => c.status === 'follow_up' || c.status === 'follow-up')
 
   return (
-    <div className="min-h-screen bg-background selection:bg-primary/20 text-foreground">
-      {/* Header Sticky */}
+    <div className="min-h-screen bg-background selection:bg-primary/20 text-foreground pb-20">
       <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="mx-auto max-w-5xl px-6 h-14 flex items-center justify-between">
+        <div className="mx-auto max-w-5xl px-4 md:px-6 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center text-primary-foreground font-bold shadow-lg shadow-primary/20 text-sm">
               S
             </div>
-            <span className="font-bold text-base tracking-tight">Sinapse CRM</span>
+            <span className="font-bold text-base tracking-tight hidden md:inline">Sinapse CRM</span>
+          </div>
+          
+          <div className="flex items-center gap-2">
+             <NotificationsNav />
+             <div className="h-4 w-[1px] bg-border mx-1"></div>
+             <UserProfile />
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-5xl p-6 space-y-6">
-        
-        {/* Controles Principais */}
+      <main className="mx-auto max-w-5xl p-4 md:p-6 space-y-6">
         <div className="flex flex-col md:flex-row justify-between items-end md:items-center gap-4">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Painel de Setup</h1>
@@ -108,12 +124,11 @@ export default function Home() {
                />
              </div>
              
-             {/* Dropdown de Ordenação (Simples HTML Select se não tiver UI component) */}
              <div className="relative">
                 <select 
                   value={sortBy} 
                   onChange={(e) => setSortBy(e.target.value as 'deadline' | 'alpha')}
-                  className="h-9 pl-8 pr-4 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 appearance-none cursor-pointer hover:bg-accent"
+                  className="h-9 pl-8 pr-4 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring appearance-none cursor-pointer hover:bg-accent"
                 >
                   <option value="deadline">Prazo</option>
                   <option value="alpha">A-Z</option>
@@ -129,7 +144,6 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Formulário Novo Cliente */}
         {isAddingClient && (
           <div className="bg-card border border-border/60 rounded-xl p-4 shadow-sm animate-in zoom-in-95 duration-200">
             <div className="flex items-center gap-2 mb-3 text-sm font-semibold text-primary">
@@ -159,7 +173,6 @@ export default function Home() {
           </div>
         )}
 
-        {/* Listagem */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="bg-muted/50 p-1 h-9 w-full md:w-auto rounded-lg">
             <TabsTrigger value="setup" className="text-xs px-4 h-7">
@@ -177,7 +190,13 @@ export default function Home() {
               </div>
             ) : (
               setupClients.map(client => (
-                <ClientCard key={client.id} client={client} onUpdate={fetchClients} />
+                <ClientCard 
+                  key={client.id} 
+                  client={client} 
+                  onUpdate={fetchClients}
+                  initialExpanded={client.id === targetClientId}
+                  initialTab={client.id === targetClientId ? targetTab : undefined}
+                />
               ))
             )}
           </TabsContent>
@@ -189,12 +208,26 @@ export default function Home() {
               </div>
             ) : (
               followUpClients.map(client => (
-                <ClientCard key={client.id} client={client} onUpdate={fetchClients} />
+                <ClientCard 
+                  key={client.id} 
+                  client={client} 
+                  onUpdate={fetchClients}
+                  initialExpanded={client.id === targetClientId}
+                  initialTab={client.id === targetClientId ? targetTab : undefined}
+                />
               ))
             )}
           </TabsContent>
         </Tabs>
       </main>
     </div>
+  )
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-screen">Carregando...</div>}>
+      <DashboardContent />
+    </Suspense>
   )
 }
