@@ -13,7 +13,6 @@ import {
 } from 'lucide-react'
 import type { Client, Task as TaskType, Comment } from '@/lib/types'
 import { cn } from '@/lib/utils'
-// CORREÇÃO: Adicionado formatDistanceToNow na importação abaixo
 import { addDays, format, differenceInCalendarDays, formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 
@@ -71,7 +70,6 @@ function SortableTaskItem({ task, onToggle, onEdit }: { task: TaskType, onToggle
         task.is_completed && "opacity-60"
       )}
     >
-      {/* Handle de arrastar */}
       <button {...attributes} {...listeners} className="opacity-0 group-hover/task:opacity-100 cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground touch-none">
         <GripVertical className="w-4 h-4" />
       </button>
@@ -115,7 +113,6 @@ function SortableTaskItem({ task, onToggle, onEdit }: { task: TaskType, onToggle
   )
 }
 
-// --- Componente Principal ---
 interface ClientCardProps {
   client: Client & { tasks: TaskType[], comments: Comment[] }
   onUpdate: () => void
@@ -128,7 +125,6 @@ export function ClientCard({ client, onUpdate, initialExpanded = false, initialT
   const [activeTab, setActiveTab] = useState<'tasks' | 'comments'>(initialTab)
   const [localTasks, setLocalTasks] = useState<TaskType[]>(client.tasks || [])
   
-  // Reage a props externas (notificações) e atualizações do banco
   useEffect(() => {
     setLocalTasks(client.tasks?.sort((a, b) => (a.position || 0) - (b.position || 0)) || [])
   }, [client.tasks])
@@ -145,19 +141,17 @@ export function ClientCard({ client, onUpdate, initialExpanded = false, initialT
     }
   }, [initialExpanded, initialTab, client.id])
 
-  // Estados de Input
+  // Restante do código (estados e handlers)...
   const [isAddingTask, setIsAddingTask] = useState(false)
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [newComment, setNewComment] = useState('')
   const [isSendingComment, setIsSendingComment] = useState(false)
 
-  // Configuração DND
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   )
 
-  // Cálculos de Prazo e Visual
   const totalTasks = localTasks.length
   const completedTasks = localTasks.filter(t => t.is_completed).length
   const isComplete = totalTasks > 0 && completedTasks === totalTasks
@@ -166,28 +160,21 @@ export function ClientCard({ client, onUpdate, initialExpanded = false, initialT
   const deadlineDate = addDays(startDate, 7)
   const daysLeft = differenceInCalendarDays(deadlineDate, new Date())
   
-  // Lógica de Cor do Deadline
   const getDeadlineStyles = () => {
     if (client.status !== 'setup') return "border-border text-muted-foreground"
-    
     if (daysLeft < 0) return "bg-red-950/30 border-red-900 text-red-500 shadow-[0_0_10px_rgba(220,38,38,0.4)] animate-pulse"
     if (daysLeft <= 2) return "bg-red-900/20 border-red-800 text-red-400 shadow-[0_0_8px_rgba(220,38,38,0.2)]"
     if (daysLeft <= 4) return "bg-orange-900/10 border-orange-800/50 text-orange-400 shadow-sm"
-    
     return "bg-secondary/50 border-border text-muted-foreground"
   }
-
-  // --- Handlers ---
 
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event
     if (!over || active.id === over.id) return
-
     setLocalTasks((items) => {
       const oldIndex = items.findIndex((i) => i.id === active.id)
       const newIndex = items.findIndex((i) => i.id === over.id)
       const newOrder = arrayMove(items, oldIndex, newIndex)
-      
       const updates = newOrder.map((task, index) => 
         fetch('/api/tasks', {
             method: 'PATCH',
@@ -196,14 +183,12 @@ export function ClientCard({ client, onUpdate, initialExpanded = false, initialT
         })
       )
       Promise.all(updates).then(() => onUpdate())
-
       return newOrder
     })
   }
 
   const handleAddTask = async () => {
     if (!newTaskTitle.trim()) return
-    
     const optimisticTask = {
         id: 'temp-' + Date.now(),
         title: newTaskTitle,
@@ -211,11 +196,9 @@ export function ClientCard({ client, onUpdate, initialExpanded = false, initialT
         position: localTasks.length,
         client_id: client.id
     } as TaskType
-    
     setLocalTasks([...localTasks, optimisticTask])
     setNewTaskTitle('')
     setIsAddingTask(false)
-
     await fetch('/api/tasks', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -230,13 +213,11 @@ export function ClientCard({ client, onUpdate, initialExpanded = false, initialT
   const handleToggleTask = async (task: TaskType) => {
     const newStatus = !task.is_completed
     setLocalTasks(localTasks.map(t => t.id === task.id ? {...t, is_completed: newStatus} : t))
-
     await fetch('/api/tasks', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: task.id, is_completed: newStatus })
     })
-    
     if (newStatus && completedTasks + 1 === totalTasks && client.status === 'setup') {
        if(confirm("Setup finalizado! Mover cliente para Carteira?")) {
           await fetch(`/api/clients/${client.id}`, {
@@ -298,13 +279,11 @@ export function ClientCard({ client, onUpdate, initialExpanded = false, initialT
           </button>
 
           <div className="flex-1 cursor-pointer grid grid-cols-[1fr_auto] items-center gap-4" onClick={() => setIsExpanded(!isExpanded)}>
-            
             <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-4 overflow-hidden">
                 <h3 className="font-semibold text-sm text-foreground truncate flex items-center gap-2 min-w-fit">
                   {client.name}
                   {isComplete && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />}
                 </h3>
-                
                 <div className="flex items-center gap-2 text-xs text-muted-foreground/80 font-mono">
                     <span className="hidden md:inline text-border">|</span>
                     <Calendar className="w-3 h-3 opacity-70" />
@@ -324,11 +303,9 @@ export function ClientCard({ client, onUpdate, initialExpanded = false, initialT
                     {daysLeft > 0 ? `${daysLeft}d` : 'HOJE'}
                   </div>
                )}
-               
                <div className="text-xs font-medium text-muted-foreground bg-muted/50 px-2 py-0.5 rounded min-w-[3rem] text-center">
                  {completedTasks}/{totalTasks}
                </div>
-
                <Button
                 variant="ghost"
                 size="icon"
@@ -343,7 +320,6 @@ export function ClientCard({ client, onUpdate, initialExpanded = false, initialT
 
         {isExpanded && (
           <div className="mt-2 pt-2 border-t border-border/40 animate-in slide-in-from-top-1 duration-200">
-            
             <div className="flex gap-4 px-2 mb-2">
                <button 
                  onClick={() => setActiveTab('tasks')}
@@ -374,7 +350,6 @@ export function ClientCard({ client, onUpdate, initialExpanded = false, initialT
                         ))}
                         </div>
                     </SortableContext>
-
                     {isAddingTask ? (
                         <div className="flex gap-2 items-center mt-2 pl-1.5 animate-in fade-in">
                         <Input
@@ -415,7 +390,6 @@ export function ClientCard({ client, onUpdate, initialExpanded = false, initialT
                         </div>
                       ))}
                    </div>
-
                    <div className="flex gap-2 items-end">
                       <Textarea 
                         placeholder="Escreva..." 
