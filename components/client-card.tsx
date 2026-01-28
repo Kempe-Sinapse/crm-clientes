@@ -6,11 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
-import { Progress } from '@/components/ui/progress' // Certifique-se de ter este componente ou use a div html abaixo
-import { 
-  ChevronDown, ChevronRight, Plus, Trash2, Calendar, 
-  MessageSquare, Loader2, CheckCircle2 
-} from 'lucide-react'
+import { ChevronDown, ChevronRight, Plus, Trash2, CheckCircle2, Loader2 } from 'lucide-react'
 import { addDays, formatDistanceToNow, isPast } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import type { Client, Task as TaskType } from '@/lib/types'
@@ -23,62 +19,54 @@ interface ClientCardProps {
 export function ClientCard({ client, onUpdate }: ClientCardProps) {
   const [isExpanded, setIsExpanded] = useState(false)
   
-  // Estado para adicionar nova tarefa (item do checklist)
+  // Estados para adicionar item extra ao checklist
   const [isAddingTask, setIsAddingTask] = useState(false)
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [isSaving, setIsSaving] = useState(false)
 
-  // Cálculos de prazo e progresso
-  // Assumindo prazo de 7 dias para setup
+  // Cálculos de Prazo (7 dias)
   const deadlineDate = addDays(new Date(client.created_at), 7)
   const isOverdue = isPast(deadlineDate) && client.status === 'setup'
   
-  // No banco 'tasks' são os itens do checklist principal
+  // Progresso do Checklist
   const checklistItems = client.tasks || []
-  const completedCount = checklistItems.filter(t => t.is_completed).length // Note: is_completed vs completed
+  // Nota: Verifique se no seu banco é 'is_completed' ou 'completed'. Ajustei para suportar ambos.
+  const completedCount = checklistItems.filter((t: any) => t.is_completed || t.completed).length
   const totalCount = checklistItems.length
   const progress = totalCount === 0 ? 0 : (completedCount / totalCount) * 100
   const isAllDone = totalCount > 0 && completedCount === totalCount
 
-  // Função para adicionar item ao checklist manual
+  // Adicionar item manual ao checklist
   const handleAddItem = async () => {
     if (!newTaskTitle.trim()) return
     setIsSaving(true)
 
-    try {
-      const res = await fetch('/api/tasks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          client_id: client.id,
-          title: newTaskTitle,
-          description: '',
-          deadline: new Date().toISOString()
-        })
+    await fetch('/api/tasks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        client_id: client.id,
+        title: newTaskTitle,
+        deadline: new Date().toISOString()
       })
-      
-      if (res.ok) {
-        setNewTaskTitle('')
-        setIsAddingTask(false)
-        onUpdate() // Atualiza a tela
-      }
-    } catch (error) {
-      console.error("Erro ao adicionar:", error)
-    } finally {
-      setIsSaving(false)
-    }
+    })
+    
+    setNewTaskTitle('')
+    setIsAddingTask(false)
+    setIsSaving(false)
+    onUpdate()
   }
 
   const handleDeleteClient = async (e: React.MouseEvent) => {
     e.stopPropagation()
-    if (confirm('Tem certeza que deseja excluir este cliente e todo o histórico?')) {
+    if (confirm('Tem certeza que deseja excluir este cliente?')) {
       await fetch(`/api/clients/${client.id}`, { method: 'DELETE' })
       onUpdate()
     }
   }
 
   const handleFinishSetup = async () => {
-    if (confirm('Confirmar conclusão do Setup e mover para Follow-up?')) {
+    if (confirm('Mover cliente para carteira de Follow-up?')) {
         await fetch(`/api/clients/${client.id}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
@@ -89,9 +77,9 @@ export function ClientCard({ client, onUpdate }: ClientCardProps) {
   }
 
   return (
-    <Card className={`group overflow-hidden border transition-all hover:shadow-md ${isAllDone ? 'border-emerald-200 bg-emerald-50/10' : 'border-border'}`}>
-      {/* Header do Cartão (Tarefa Mãe) */}
+    <Card className={`group overflow-hidden border transition-all hover:shadow-md mb-3 ${isAllDone ? 'border-emerald-200 bg-emerald-50/10' : 'border-border'}`}>
       <div className="p-4">
+        {/* Cabeçalho: Tarefa Mãe (Cliente) */}
         <div className="flex items-start gap-3">
           <button
             onClick={() => setIsExpanded(!isExpanded)}
@@ -101,7 +89,7 @@ export function ClientCard({ client, onUpdate }: ClientCardProps) {
           </button>
 
           <div className="flex-1 min-w-0" onClick={() => setIsExpanded(!isExpanded)}>
-            <div className="flex items-center justify-between gap-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
                <div>
                  <h3 className="font-bold text-lg leading-none cursor-pointer hover:underline decoration-dashed underline-offset-4">
                     {client.name}
@@ -109,9 +97,8 @@ export function ClientCard({ client, onUpdate }: ClientCardProps) {
                  <p className="text-sm text-muted-foreground mt-1">{client.email}</p>
                </div>
                
-               {/* Badge de Deadline */}
                {client.status === 'setup' && (
-                   <Badge variant={isOverdue ? "destructive" : "secondary"} className="whitespace-nowrap">
+                   <Badge variant={isOverdue ? "destructive" : "secondary"} className="w-fit">
                       {isOverdue ? "Atrasado" : formatDistanceToNow(deadlineDate, { locale: ptBR, addSuffix: true })}
                    </Badge>
                )}
@@ -126,32 +113,29 @@ export function ClientCard({ client, onUpdate }: ClientCardProps) {
                   />
                </div>
                <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">
-                 {completedCount}/{totalCount}
+                 {completedCount}/{totalCount} tarefas
                </span>
             </div>
           </div>
 
-          <div className="flex flex-col gap-2 pl-2 border-l border-border/50">
-             <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                onClick={handleDeleteClient}
-             >
-               <Trash2 className="w-4 h-4" />
-             </Button>
-          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+            onClick={handleDeleteClient}
+          >
+            <Trash2 className="w-4 h-4" />
+          </Button>
         </div>
 
-        {/* Corpo do Cartão (Subtarefas/Checklist) */}
+        {/* Corpo: Checklist (Subtarefas) */}
         {isExpanded && (
-          <div className="mt-6 pl-8 space-y-4 animate-in slide-in-from-top-2 duration-200">
+          <div className="mt-6 pl-8 space-y-3 animate-in slide-in-from-top-2 duration-200">
             
-            {/* Lista de Itens */}
             <div className="space-y-1">
               {checklistItems
-                .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()) // Mantém ordem de criação
-                .map(task => (
+                .sort((a: any, b: any) => (a.position || 0) - (b.position || 0))
+                .map((task: any) => (
                   <ChecklistItem 
                     key={task.id} 
                     task={task} 
@@ -160,7 +144,6 @@ export function ClientCard({ client, onUpdate }: ClientCardProps) {
               ))}
             </div>
 
-            {/* Botão Adicionar Novo Item */}
             {isAddingTask ? (
               <div className="flex gap-2 items-center mt-2 bg-muted/20 p-2 rounded-md">
                 <Input
@@ -181,18 +164,17 @@ export function ClientCard({ client, onUpdate }: ClientCardProps) {
                 variant="ghost"
                 size="sm"
                 onClick={() => setIsAddingTask(true)}
-                className="text-muted-foreground hover:text-primary -ml-2"
+                className="text-muted-foreground hover:text-primary -ml-2 h-8 text-xs"
               >
-                <Plus className="w-4 h-4 mr-2" /> Adicionar subtarefa
+                <Plus className="w-3 h-3 mr-2" /> Adicionar subtarefa
               </Button>
             )}
 
-            {/* Botão de Finalizar Setup (Aparece só quando tudo está pronto) */}
             {isAllDone && client.status === 'setup' && (
                 <div className="pt-4 border-t border-border mt-4 flex justify-end">
-                    <Button onClick={handleFinishSetup} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+                    <Button onClick={handleFinishSetup} className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm">
                         <CheckCircle2 className="w-4 h-4 mr-2" />
-                        Encerrar Setup e Mover para Carteira
+                        Encerrar Setup
                     </Button>
                 </div>
             )}
@@ -203,35 +185,26 @@ export function ClientCard({ client, onUpdate }: ClientCardProps) {
   )
 }
 
-// Componente individual de cada item do checklist
-function ChecklistItem({ task, onUpdate }: { task: TaskType, onUpdate: () => void }) {
+function ChecklistItem({ task, onUpdate }: { task: any, onUpdate: () => void }) {
     const [isLoading, setIsLoading] = useState(false)
 
     const toggleCheck = async () => {
         setIsLoading(true)
-        try {
-            await fetch('/api/tasks', {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                // Atenção: o banco pode usar 'is_completed' ou 'completed', verifique seu types.ts
-                // Baseado no seu script SQL, é is_completed.
-                body: JSON.stringify({ 
-                    id: task.id, 
-                    // @ts-ignore - forçando compatibilidade caso type esteja diferente
-                    completed: !task.is_completed && !task.completed,
-                    // Se o endpoint esperar 'is_completed', adicionar aqui:
-                    is_completed: !task.is_completed
-                }) 
-            })
-            onUpdate()
-        } catch (err) {
-            console.error(err)
-        } finally {
-            setIsLoading(false)
-        }
+        const isCurrentlyDone = task.is_completed || task.completed
+        await fetch('/api/tasks', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                id: task.id, 
+                completed: !isCurrentlyDone, // Para compatibilidade
+                is_completed: !isCurrentlyDone // Para o banco novo
+            }) 
+        })
+        onUpdate()
+        setIsLoading(false)
     }
 
-    const isDone = task.is_completed || (task as any).completed
+    const isDone = task.is_completed || task.completed
 
     return (
         <div className={`flex items-center gap-3 p-2 rounded-md transition-colors ${isDone ? 'opacity-60 bg-muted/20' : 'hover:bg-muted/40'}`}>
@@ -243,7 +216,6 @@ function ChecklistItem({ task, onUpdate }: { task: TaskType, onUpdate: () => voi
             <span className={`text-sm flex-1 ${isDone ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
                 {task.title}
             </span>
-            {/* Se quiser adicionar comentários específicos por item no futuro, o botão iria aqui */}
         </div>
     )
 }
